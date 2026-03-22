@@ -11,8 +11,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Safe API key handling
-api_key = os.getenv("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")
-
+api_key = os.getenv("OPENAI_API_KEY")
 client = None
 if api_key:
     client = OpenAI(api_key=api_key)
