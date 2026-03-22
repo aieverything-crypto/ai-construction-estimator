@@ -4,6 +4,8 @@ from openai import OpenAI
 import os
 import re
 
+print("APP STARTED SUCCESSFULLY")
+
 # -----------------------------
 # INIT
 # -----------------------------
@@ -11,7 +13,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # -----------------------------
-# SAFE OPENAI INIT (WILL NOT CRASH APP)
+# SAFE OPENAI INIT
 # -----------------------------
 client = None
 
@@ -20,13 +22,13 @@ try:
     if api_key:
         client = OpenAI(api_key=api_key)
     else:
-        print("No API key found in environment.")
+        print("No API key found.")
 except Exception as e:
     print("OpenAI init error:", e)
     client = None
 
 # -----------------------------
-# BASE COST DATABASE ($ / sq ft)
+# BASE COST DATABASE
 # -----------------------------
 cost_per_sqft = {
     "residential": (150, 300),
@@ -35,9 +37,6 @@ cost_per_sqft = {
     "remodel": (100, 250)
 }
 
-# -----------------------------
-# MATERIAL DATABASE
-# -----------------------------
 materials_db = {
     "concrete": {"price": 150},
     "rebar": {"price": 0.85},
@@ -46,7 +45,7 @@ materials_db = {
 }
 
 # -----------------------------
-# INPUT PARSERS
+# HELPERS
 # -----------------------------
 def parse_budget(budget_input):
     if not budget_input:
@@ -85,9 +84,6 @@ def parse_size(size_input):
     return float(nums[0]) if nums else 2000
 
 
-# -----------------------------
-# COMPLEXITY ENGINE
-# -----------------------------
 def get_project_complexity(project, description):
     complexity = 1.0
     override = None
@@ -111,9 +107,6 @@ def get_project_complexity(project, description):
     return complexity, override, special
 
 
-# -----------------------------
-# ADJUSTMENTS
-# -----------------------------
 def get_adjustments(materials, city, timeline):
     m, l, t = 1.0, 1.0, 1.0
 
@@ -129,9 +122,6 @@ def get_adjustments(materials, city, timeline):
     return m, l, t
 
 
-# -----------------------------
-# LEAD SCORING
-# -----------------------------
 def calculate_lead_score(size, budget, min_cost):
     score = 5
 
@@ -165,7 +155,7 @@ def contractor_decision(total, budget):
 # -----------------------------
 @app.route("/")
 def home():
-    return jsonify({"status": "running"})
+    return {"status": "running"}
 
 
 @app.route("/analyze", methods=["POST"])
@@ -206,9 +196,7 @@ def analyze():
 
         budget_gap = budget_val - total_cost if budget_val else 0
 
-        # -----------------------------
-        # AI CALL (SAFE)
-        # -----------------------------
+        # AI CALL
         analysis_text = "AI analysis unavailable."
 
         if client:
