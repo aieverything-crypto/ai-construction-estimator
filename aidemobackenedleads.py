@@ -4,11 +4,6 @@ from openai import OpenAI
 import os
 import re
 
-print("APP STARTED SUCCESSFULLY")
-
-# -----------------------------
-# INIT
-# -----------------------------
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -16,19 +11,15 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # SAFE OPENAI INIT
 # -----------------------------
 client = None
-
 try:
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key:
         client = OpenAI(api_key=api_key)
-    else:
-        print("No API key found.")
 except Exception as e:
     print("OpenAI init error:", e)
-    client = None
 
 # -----------------------------
-# BASE COST DATABASE
+# BASE COST DATABASE ($ / sq ft)
 # -----------------------------
 cost_per_sqft = {
     "residential": (150, 300),
@@ -37,34 +28,27 @@ cost_per_sqft = {
     "remodel": (100, 250)
 }
 
-materials_db = {
-    "concrete": {"price": 150},
-    "rebar": {"price": 0.85},
-    "lumber": {"price": 4.25},
-    "drywall": {"price": 15}
-}
-
 # -----------------------------
-# HELPERS
+# INPUT PARSERS (IMPROVED)
 # -----------------------------
 def parse_budget(budget_input):
     if not budget_input:
         return 0
 
     text = str(budget_input).lower().replace(",", "").replace("$", "").strip()
+    nums = re.findall(r"\d+\.?\d*", text)
+
+    if not nums:
+        return 0
+
+    value = float(nums[0])
 
     if "m" in text:
-        nums = re.findall(r"\d+\.?\d*", text)
-        if nums:
-            return float(nums[0]) * 1_000_000
+        value *= 1_000_000
+    elif "k" in text:
+        value *= 1_000
 
-    if "k" in text:
-        nums = re.findall(r"\d+\.?\d*", text)
-        if nums:
-            return float(nums[0]) * 1_000
-
-    nums = re.findall(r"\d+\.?\d*", text)
-    return float(nums[0]) if nums else 0
+    return value
 
 
 def parse_size(size_input):
@@ -83,57 +67,91 @@ def parse_size(size_input):
     nums = re.findall(r"\d+\.?\d*", text)
     return float(nums[0]) if nums else 2000
 
-
+# -----------------------------
+# COMPLEXITY ENGINE (IMPROVED)
+# -----------------------------
 def get_project_complexity(project, description):
-    complexity = 1.0
+    factor = 1.0
     override = None
     special = None
 
     text = f"{project or ''} {description or ''}".lower()
 
     if "underground" in text or "bunker" in text:
-        complexity += 2.0
+        factor += 2.0
         override = "industrial"
         special = (500, 1500)
 
-    if "antarctica" in text:
-        complexity += 2.0
+    if "antarctica" in text or "arctic" in text:
+        factor += 2.0
         special = (800, 2500)
 
-    if "hospital" in text:
-        complexity += 1.5
+    if "hospital" in text or "lab" in text:
+        factor += 1.5
         special = (400, 1200)
 
-    return complexity, override, special
+    if "luxury" in text:
+        factor += 0.5
 
+    if "simple" in text or "shed" in text:
+        factor -= 0.3
 
+    return factor, override, special
+
+# -----------------------------
+# ADJUSTMENTS
+# -----------------------------
 def get_adjustments(materials, city, timeline):
     m, l, t = 1.0, 1.0, 1.0
 
-    if materials and "steel" in materials.lower():
-        m += 0.15
+    if materials:
+        mat = materials.lower()
+        if "steel" in mat:
+            m += 0.15
+        if "concrete" in mat:
+            m += 0.10
+        if "luxury" in mat:
+            m += 0.25
 
-    if city and "california" in city.lower():
-        l += 0.25
+    if city:
+        c = city.lower()
+        if "california" in c or "new york" in c:
+            l += 0.25
 
-    if timeline and "rush" in timeline.lower():
-        t += 0.20
+    if timeline:
+        tline = timeline.lower()
+        if "fast" in tline or "rush" in tline:
+            t += 0.20
 
     return m, l, t
 
-
-def calculate_lead_score(size, budget, min_cost):
+# -----------------------------
+# FIXED LEAD SCORING (IMPORTANT)
+# -----------------------------
+def calculate_lead_score(size, budget, cost):
     score = 5
 
+    # Size
     if size > 5000:
         score += 2
+    elif size < 1000:
+        score -= 1
 
-    if budget < min_cost * 0.3:
+    # Budget realism (FIXED)
+    if budget == 0:
+        score -= 2
+    elif budget < cost * 0.3:
         score -= 4
+    elif budget < cost * 0.6:
+        score -= 2
+    elif budget > cost * 1.5:
+        score += 2
 
     return max(1, min(10, score))
 
-
+# -----------------------------
+# CONTRACTOR DECISION
+# -----------------------------
 def contractor_decision(total, budget):
     if budget == 0:
         return "NEGOTIATE ⚠️", "No budget"
@@ -141,14 +159,13 @@ def contractor_decision(total, budget):
     ratio = budget / total
 
     if ratio < 0.6:
-        return "REJECT ❌", "Too low"
+        return "REJECT ❌", "Budget far below cost"
     elif ratio < 0.9:
-        return "NEGOTIATE ⚠️", "Below cost"
+        return "NEGOTIATE ⚠️", "Budget below cost"
     elif ratio <= 1.3:
-        return "TAKE JOB ✅", "Fair"
+        return "TAKE JOB ✅", "Budget aligned"
     else:
-        return "HIGH VALUE 💰", "Great deal"
-
+        return "HIGH VALUE 💰", "Strong profit potential"
 
 # -----------------------------
 # ROUTES
@@ -156,7 +173,6 @@ def contractor_decision(total, budget):
 @app.route("/")
 def home():
     return {"status": "running"}
-
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
@@ -190,22 +206,49 @@ def analyze():
         labor_cost = total_cost * 0.55
 
         recommended_bid = total_cost * 1.25
+        aggressive_bid = total_cost * 1.15
+        min_bid = total_cost * 1.10
 
-        lead_score = calculate_lead_score(size_val, budget_val, base_low)
+        lead_score = calculate_lead_score(size_val, budget_val, total_cost)
         decision, reason = contractor_decision(total_cost, budget_val)
 
         budget_gap = budget_val - total_cost if budget_val else 0
 
-        # AI CALL
+        # -----------------------------
+        # AI CONTRACTOR REPORT (UPGRADED)
+        # -----------------------------
         analysis_text = "AI analysis unavailable."
 
         if client:
             try:
+                prompt = f"""
+You are a senior construction estimator.
+
+Project: {project}
+Size: {size_val} sqft
+City: {city}
+Materials: {materials}
+Budget: {budget_val}
+
+Estimated Cost: {total_cost}
+
+Explain:
+- Cost realism
+- Key cost drivers
+- Whether contractor should take the job
+- Risk level
+- Bid strategy
+
+Be practical and realistic.
+"""
+
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": f"Explain this project cost simply: {total_cost}"}]
+                    messages=[{"role": "user", "content": prompt}]
                 )
+
                 analysis_text = response.choices[0].message.content
+
             except Exception as e:
                 analysis_text = f"AI error: {str(e)}"
 
@@ -216,6 +259,8 @@ def analyze():
                 "material_cost": material_cost,
                 "labor_cost": labor_cost,
                 "recommended_bid": recommended_bid,
+                "aggressive_bid": aggressive_bid,
+                "min_bid": min_bid,
                 "lead_score": lead_score,
                 "decision": decision,
                 "budget_gap": budget_gap
