@@ -10,11 +10,20 @@ import re
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Safe API key handling
-api_key = os.getenv("OPENAI_API_KEY")
+# -----------------------------
+# SAFE OPENAI INIT (WILL NOT CRASH APP)
+# -----------------------------
 client = None
-if api_key:
-    client = OpenAI(api_key=api_key)
+
+try:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
+        client = OpenAI(api_key=api_key)
+    else:
+        print("No API key found in environment.")
+except Exception as e:
+    print("OpenAI init error:", e)
+    client = None
 
 # -----------------------------
 # BASE COST DATABASE ($ / sq ft)
@@ -156,76 +165,74 @@ def contractor_decision(total, budget):
 # -----------------------------
 @app.route("/")
 def home():
-    return "AI Contractor Engine Running"
+    return jsonify({"status": "running"})
 
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    data = request.json
+    try:
+        data = request.json
 
-    project = data.get("project")
-    size = data.get("size")
-    materials = data.get("materials")
-    budget = data.get("budget")
-    timeline = data.get("timeline")
-    city = data.get("city")
-    description = data.get("description")
+        project = data.get("project")
+        size = data.get("size")
+        materials = data.get("materials")
+        budget = data.get("budget")
+        timeline = data.get("timeline")
+        city = data.get("city")
+        description = data.get("description")
 
-    size_val = parse_size(size)
-    budget_val = parse_budget(budget)
+        size_val = parse_size(size)
+        budget_val = parse_budget(budget)
 
-    complexity, override, special = get_project_complexity(project, description)
+        complexity, override, special = get_project_complexity(project, description)
+        project_type = override or "residential"
 
-    project_type = override or "residential"
+        low, high = special if special else cost_per_sqft[project_type]
 
-    low, high = special if special else cost_per_sqft[project_type]
+        base_low = size_val * low
+        base_high = size_val * high
 
-    base_low = size_val * low
-    base_high = size_val * high
+        m, l, t = get_adjustments(materials, city, timeline)
 
-    m, l, t = get_adjustments(materials, city, timeline)
+        total_cost = ((base_low + base_high) / 2) * complexity * m * l * t
 
-    total_cost = ((base_low + base_high) / 2) * complexity * m * l * t
+        material_cost = total_cost * 0.45
+        labor_cost = total_cost * 0.55
 
-    material_cost = total_cost * 0.45
-    labor_cost = total_cost * 0.55
+        recommended_bid = total_cost * 1.25
 
-    recommended_bid = total_cost * 1.25
+        lead_score = calculate_lead_score(size_val, budget_val, base_low)
+        decision, reason = contractor_decision(total_cost, budget_val)
 
-    lead_score = calculate_lead_score(size_val, budget_val, base_low)
-    decision, reason = contractor_decision(total_cost, budget_val)
+        budget_gap = budget_val - total_cost if budget_val else 0
 
-    budget_gap = budget_val - total_cost if budget_val else 0
+        # -----------------------------
+        # AI CALL (SAFE)
+        # -----------------------------
+        analysis_text = "AI analysis unavailable."
 
-    # -----------------------------
-    # SAFE AI CALL
-    # -----------------------------
-    analysis_text = "AI analysis unavailable."
+        if client:
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": f"Explain this project cost simply: {total_cost}"}]
+                )
+                analysis_text = response.choices[0].message.content
+            except Exception as e:
+                analysis_text = f"AI error: {str(e)}"
 
-    if client:
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": f"Explain this project cost simply: {total_cost}"}]
-            )
-            analysis_text = response.choices[0].message.content
-        except Exception as e:
-            analysis_text = f"AI error: {str(e)}"
+        return jsonify({
+            "analysis": analysis_text,
+            "data": {
+                "total_cost": total_cost,
+                "material_cost": material_cost,
+                "labor_cost": labor_cost,
+                "recommended_bid": recommended_bid,
+                "lead_score": lead_score,
+                "decision": decision,
+                "budget_gap": budget_gap
+            }
+        })
 
-    return jsonify({
-        "analysis": analysis_text,
-        "data": {
-            "total_cost": total_cost,
-            "material_cost": material_cost,
-            "labor_cost": labor_cost,
-            "recommended_bid": recommended_bid,
-            "lead_score": lead_score,
-            "decision": decision,
-            "budget_gap": budget_gap
-        }
-    })
-
-
-# -----------------------------
-# START
-# -----------------------------
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500-------
