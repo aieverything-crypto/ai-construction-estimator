@@ -30,7 +30,7 @@ cost_per_sqft = {
 }
 
 # -----------------------------
-# AI NORMALIZATION (NEW)
+# AI NORMALIZATION
 # -----------------------------
 def normalize_inputs_with_ai(user_input):
     if not client:
@@ -44,8 +44,7 @@ Rules:
 - Convert ALL sizes to square feet
 - Convert ALL money to USD
 - Convert timeline to MONTHS
-- If invalid (like pounds for money), return null
-- Be precise
+- If invalid (like pounds), return null
 
 Input:
 {user_input}
@@ -57,7 +56,6 @@ Output JSON ONLY:
     "timeline_months": number
 }}
 """
-
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -70,9 +68,8 @@ Output JSON ONLY:
         print("AI normalization failed:", e)
         return None
 
-
 # -----------------------------
-# FALLBACK PARSERS (YOUR ORIGINAL, KEPT)
+# FALLBACK PARSERS
 # -----------------------------
 def parse_budget(budget_input):
     if not budget_input:
@@ -82,13 +79,6 @@ def parse_budget(budget_input):
 
     if any(x in text for x in ["lb", "lbs", "pound", "kg"]):
         return None
-
-    multiplier = 1
-
-    if "€" in text or "eur" in text:
-        multiplier = 1.1
-    elif "£" in text or "gbp" in text:
-        multiplier = 1.25
 
     nums = re.findall(r"\d+\.?\d*", text)
     if not nums:
@@ -101,7 +91,7 @@ def parse_budget(budget_input):
     elif any(x in text for x in ["thousand", "k"]):
         value *= 1_000
 
-    return value * multiplier
+    return value
 
 
 def parse_size(size_input):
@@ -110,30 +100,24 @@ def parse_size(size_input):
 
     text = str(size_input).lower().replace(",", "").strip()
 
-    # FIX: handle "meter to the power of 2"
     text = text.replace("meter to the power of 2", "sqm")
     text = text.replace("meters to the power of 2", "sqm")
-
     text = text.replace("square meters", "sqm")
     text = text.replace("sq meters", "sqm")
-    text = text.replace("sq meter", "sqm")
 
     if any(x in text for x in ["sqm", "m2", "m^2"]):
         nums = re.findall(r"\d+\.?\d*", text)
         if nums:
             return float(nums[0]) * 10.764
 
-    text = text.replace("sqft", "").replace("sq ft", "").replace("ft", "")
-
     nums = re.findall(r"\d+\.?\d*", text)
     return float(nums[0]) if nums else 2000
 
-
 # -----------------------------
-# PROJECT TYPE + COMPLEXITY
+# PROJECT TYPE
 # -----------------------------
 def detect_project_type(project, description):
-    text = f"{project or ''} {description or ''}".lower()
+    text = f"{project} {description}".lower()
 
     if "warehouse" in text or "factory" in text:
         return "industrial"
@@ -143,10 +127,12 @@ def detect_project_type(project, description):
         return "remodel"
     return "residential"
 
-
+# -----------------------------
+# COMPLEXITY
+# -----------------------------
 def get_project_complexity(project, description):
     factor = 1.0
-    text = f"{project or ''} {description or ''}".lower()
+    text = f"{project} {description}".lower()
 
     if "luxury" in text:
         factor += 0.8
@@ -157,6 +143,32 @@ def get_project_complexity(project, description):
 
     return factor
 
+# -----------------------------
+# LEAD SCORE (NEW)
+# -----------------------------
+def calculate_lead_score(total_cost, budget_val, timeline):
+    score = 0
+
+    if budget_val and total_cost:
+        ratio = budget_val / total_cost
+
+        if ratio >= 1.2:
+            score += 4
+        elif ratio >= 1.0:
+            score += 3
+        elif ratio >= 0.8:
+            score += 2
+        elif ratio >= 0.5:
+            score += 1
+
+    if timeline:
+        text = str(timeline).lower()
+        if "rush" in text:
+            score += 1
+        elif "year" in text or "decade" in text:
+            score += 2
+
+    return min(score, 10)
 
 # -----------------------------
 # ROUTES
@@ -164,7 +176,6 @@ def get_project_complexity(project, description):
 @app.route("/")
 def home():
     return {"status": "running"}
-
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
@@ -200,7 +211,6 @@ Description: {description}
         size_val = parse_size(size)
         budget_val = parse_budget(budget)
 
-    # SAFETY FALLBACKS
     if not size_val or size_val <= 0:
         size_val = 2000
 
@@ -214,7 +224,6 @@ Description: {description}
     complexity = get_project_complexity(project, description)
 
     low, high = cost_per_sqft[project_type]
-
     base_mid = (size_val * low + size_val * high) / 2
 
     total_cost = base_mid * complexity
@@ -223,6 +232,18 @@ Description: {description}
     labor_cost = total_cost * 0.55
 
     recommended_bid = total_cost * 1.25
+    minimum_bid = total_cost * 1.10
+    aggressive_bid = total_cost * 1.18
+
+    budget_gap = budget_val - total_cost if budget_val else None
+
+    lead_score = calculate_lead_score(total_cost, budget_val, timeline)
+
+    decision = "PASS"
+    if lead_score >= 7:
+        decision = "STRONG BID"
+    elif lead_score >= 4:
+        decision = "CONSIDER"
 
     # -----------------------------
     # AI REPORT
@@ -258,19 +279,23 @@ Explain:
             analysis_text = str(e)
 
     # -----------------------------
-    # RESPONSE (FIXED FOR UI)
+    # RESPONSE
     # -----------------------------
     return jsonify({
         "analysis": analysis_text,
         "data": {
             "total_cost": round(total_cost, 2),
             "recommended_bid": round(recommended_bid, 2),
+            "minimum_bid": round(minimum_bid, 2),
+            "aggressive_bid": round(aggressive_bid, 2),
+            "material_cost": round(material_cost, 2),
+            "labor_cost": round(labor_cost, 2),
+            "budget_gap": round(budget_gap, 2) if budget_gap else None,
             "size_sqft": round(size_val, 2),
-            "lead_score": 5,
-            "decision": "N/A"
+            "lead_score": lead_score,
+            "decision": decision
         }
     })
-
 
 if __name__ == "__main__":
     app.run(debug=True)
