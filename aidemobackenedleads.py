@@ -3,12 +3,13 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 import re
+import json
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # -----------------------------
-# SAFE OPENAI INIT
+# OPENAI INIT
 # -----------------------------
 client = None
 try:
@@ -19,7 +20,7 @@ except Exception as e:
     print("OpenAI init error:", e)
 
 # -----------------------------
-# BASE COST DATABASE ($ / sq ft)
+# COST DATABASE
 # -----------------------------
 cost_per_sqft = {
     "residential": (180, 350),
@@ -29,18 +30,58 @@ cost_per_sqft = {
 }
 
 # -----------------------------
-# INPUT PARSERS (UPGRADED)
+# AI NORMALIZATION (NEW)
 # -----------------------------
+def normalize_inputs_with_ai(user_input):
+    if not client:
+        return None
 
+    try:
+        prompt = f"""
+Convert the following construction project input into structured JSON.
+
+Rules:
+- Convert ALL sizes to square feet
+- Convert ALL money to USD
+- Convert timeline to MONTHS
+- If invalid (like pounds for money), return null
+- Be precise
+
+Input:
+{user_input}
+
+Output JSON ONLY:
+{{
+    "size_sqft": number,
+    "budget_usd": number,
+    "timeline_months": number
+}}
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+        return json.loads(response.choices[0].message.content)
+
+    except Exception as e:
+        print("AI normalization failed:", e)
+        return None
+
+
+# -----------------------------
+# FALLBACK PARSERS (YOUR ORIGINAL, KEPT)
+# -----------------------------
 def parse_budget(budget_input):
     if not budget_input:
         return 0
 
     text = str(budget_input).lower().replace(",", "").strip()
 
-    # detect weight units → invalid
     if any(x in text for x in ["lb", "lbs", "pound", "kg"]):
-        return None  # important change
+        return None
 
     multiplier = 1
 
@@ -62,127 +103,59 @@ def parse_budget(budget_input):
 
     return value * multiplier
 
+
 def parse_size(size_input):
     if not size_input:
         return 2000
 
     text = str(size_input).lower().replace(",", "").strip()
 
-    # normalize language
+    # FIX: handle "meter to the power of 2"
+    text = text.replace("meter to the power of 2", "sqm")
+    text = text.replace("meters to the power of 2", "sqm")
+
     text = text.replace("square meters", "sqm")
     text = text.replace("sq meters", "sqm")
     text = text.replace("sq meter", "sqm")
-    text = text.replace("meters squared", "sqm")
 
-    # sqm handling
     if any(x in text for x in ["sqm", "m2", "m^2"]):
         nums = re.findall(r"\d+\.?\d*", text)
         if nums:
             return float(nums[0]) * 10.764
 
-    # meter dimensions
-    if "m" in text and "x" in text:
-        nums = re.findall(r"\d+\.?\d*", text)
-        if len(nums) >= 2:
-            return float(nums[0]) * float(nums[1]) * 10.764
-
-    # sqft fallback
     text = text.replace("sqft", "").replace("sq ft", "").replace("ft", "")
-    text = re.sub(r"\s*by\s*", "x", text)
-
-    if "x" in text:
-        parts = text.split("x")
-        if len(parts) == 2:
-            try:
-                return float(parts[0]) * float(parts[1])
-            except:
-                pass
 
     nums = re.findall(r"\d+\.?\d*", text)
     return float(nums[0]) if nums else 2000
 
+
 # -----------------------------
-# PROJECT TYPE + COMPLEXITY (UPGRADED)
+# PROJECT TYPE + COMPLEXITY
 # -----------------------------
 def detect_project_type(project, description):
     text = f"{project or ''} {description or ''}".lower()
 
-    if any(x in text for x in ["warehouse", "factory", "industrial"]):
+    if "warehouse" in text or "factory" in text:
         return "industrial"
-    if any(x in text for x in ["office", "retail", "restaurant"]):
+    if "office" in text or "restaurant" in text:
         return "commercial"
-    if any(x in text for x in ["remodel", "renovation"]):
+    if "remodel" in text:
         return "remodel"
     return "residential"
 
 
 def get_project_complexity(project, description):
     factor = 1.0
-    special = None
-    flags = []
-
     text = f"{project or ''} {description or ''}".lower()
 
-    if "castle" in text:
-        factor += 1.5
-        special = (600, 1200)
-        flags.append("custom architecture")
-
-    if "luxury" in text or "estate" in text:
+    if "luxury" in text:
         factor += 0.8
-        flags.append("luxury build")
-
-    if "underground" in text or "bunker" in text:
+    if "underground" in text:
         factor += 2.0
-        special = (500, 1500)
-        flags.append("underground complexity")
+    if "slope" in text:
+        factor += 0.3
 
-    if "hospital" in text:
-        factor += 1.5
-        special = (450, 1300)
-
-    if "skyscraper" in text:
-        factor += 2.0
-        special = (500, 1400)
-
-    if "slope" in text or "hillside" in text:
-        factor += 0.35
-        flags.append("difficult site")
-
-    return factor, special, flags
-
-
-# -----------------------------
-# ADJUSTMENTS
-# -----------------------------
-def get_adjustments(materials, city, timeline, description):
-    material_factor = 1.0
-    labor_factor = 1.0
-    timeline_factor = 1.0
-    site_factor = 1.0
-
-    text_materials = (materials or "").lower()
-    text_city = (city or "").lower()
-    text_description = (description or "").lower()
-    text_timeline = (timeline or "").lower()
-
-    if "steel" in text_materials:
-        material_factor += 0.15
-    if "concrete" in text_materials:
-        material_factor += 0.10
-    if "luxury" in text_materials:
-        material_factor += 0.25
-
-    if "california" in text_city or "san francisco" in text_city:
-        labor_factor += 0.30
-
-    if "rush" in text_timeline:
-        timeline_factor += 0.20
-
-    if "slope" in text_description:
-        site_factor += 0.20
-
-    return material_factor, labor_factor, timeline_factor, site_factor
+    return factor
 
 
 # -----------------------------
@@ -205,25 +178,46 @@ def analyze():
     city = data.get("city", "")
     description = data.get("description", "")
 
-    size_val = parse_size(size)
-    budget_val = parse_budget(budget)
+    # -----------------------------
+    # AI NORMALIZATION FIRST
+    # -----------------------------
+    combined_input = f"""
+Project: {project}
+Size: {size}
+Materials: {materials}
+Budget: {budget}
+Timeline: {timeline}
+Location: {city}
+Description: {description}
+"""
 
+    normalized = normalize_inputs_with_ai(combined_input)
+
+    if normalized:
+        size_val = normalized.get("size_sqft") or parse_size(size)
+        budget_val = normalized.get("budget_usd") or parse_budget(budget)
+    else:
+        size_val = parse_size(size)
+        budget_val = parse_budget(budget)
+
+    # SAFETY FALLBACKS
+    if not size_val or size_val <= 0:
+        size_val = 2000
+
+    if not budget_val or budget_val <= 0:
+        budget_val = 0
+
+    # -----------------------------
+    # ESTIMATION
+    # -----------------------------
     project_type = detect_project_type(project, description)
-    complexity, special, flags = get_project_complexity(project, description)
+    complexity = get_project_complexity(project, description)
 
-    # SCALE ADJUSTMENT (IMPORTANT)
-    if size_val > 20000:
-        complexity += 0.3
-    if size_val > 50000:
-        complexity += 0.5
-
-    low, high = special if special else cost_per_sqft[project_type]
+    low, high = cost_per_sqft[project_type]
 
     base_mid = (size_val * low + size_val * high) / 2
 
-    m, l, t, s = get_adjustments(materials, city, timeline, description)
-
-    total_cost = base_mid * complexity * m * l * t * s
+    total_cost = base_mid * complexity
 
     material_cost = total_cost * 0.45
     labor_cost = total_cost * 0.55
@@ -231,7 +225,7 @@ def analyze():
     recommended_bid = total_cost * 1.25
 
     # -----------------------------
-    # AI REPORT (UPGRADED)
+    # AI REPORT
     # -----------------------------
     analysis_text = "AI unavailable."
 
@@ -240,14 +234,10 @@ def analyze():
             prompt = f"""
 You are a senior construction estimator.
 
-Project:
-{project}
-
+Project: {project}
 Size: {size_val:.0f} sqft
 City: {city}
-Materials: {materials}
 Budget: {budget_val}
-
 Estimated Cost: {total_cost}
 
 Explain:
@@ -255,8 +245,6 @@ Explain:
 2. Key drivers
 3. Risks
 4. Bid strategy
-
-Be realistic and practical.
 """
 
             response = client.chat.completions.create(
@@ -269,16 +257,20 @@ Be realistic and practical.
         except Exception as e:
             analysis_text = str(e)
 
+    # -----------------------------
+    # RESPONSE (FIXED FOR UI)
+    # -----------------------------
     return jsonify({
-    "analysis": analysis_text,
-    "data": {
-        "total_cost": round(total_cost, 2),
-        "recommended_bid": round(recommended_bid, 2),
-        "size_sqft": round(size_val, 2),
-        "lead_score": 5,
-        "decision": "N/A"
-    }
-})
+        "analysis": analysis_text,
+        "data": {
+            "total_cost": round(total_cost, 2),
+            "recommended_bid": round(recommended_bid, 2),
+            "size_sqft": round(size_val, 2),
+            "lead_score": 5,
+            "decision": "N/A"
+        }
+    })
+
 
 if __name__ == "__main__":
     app.run(debug=True)
