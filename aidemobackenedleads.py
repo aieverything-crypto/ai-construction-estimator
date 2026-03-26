@@ -31,14 +31,20 @@ cost_per_sqft = {
 # -----------------------------
 # INPUT PARSERS (UPGRADED)
 # -----------------------------
+
 def parse_budget(budget_input):
     if not budget_input:
         return 0
 
     text = str(budget_input).lower().replace(",", "").strip()
 
+    # 🚨 detect INVALID units like lb
+    if "lb" in text or "kg" in text:
+        return 0  # invalid budget input
+
     multiplier = 1
 
+    # currency detection
     if "€" in text or "eur" in text:
         multiplier = 1.1
     elif "£" in text or "gbp" in text:
@@ -52,9 +58,9 @@ def parse_budget(budget_input):
 
     value = float(nums[0])
 
-    if "million" in text or re.search(r"\bm\b", text):
+    if any(x in text for x in ["million", "m"]):
         value *= 1_000_000
-    elif "thousand" in text or re.search(r"\bk\b", text):
+    elif any(x in text for x in ["thousand", "k"]):
         value *= 1_000
 
     return value * multiplier
