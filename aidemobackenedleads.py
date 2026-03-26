@@ -206,7 +206,13 @@ Description: {description}
 
     if normalized:
         size_val = normalized.get("size_sqft") or parse_size(size)
-        budget_val = normalized.get("budget_usd") or parse_budget(budget)
+        budget_val = parse_budget(budget)
+
+# AI override ONLY if parser fails
+if normalized and (not budget_val or budget_val < 1000):
+    ai_budget = normalized.get("budget_usd")
+    if ai_budget:
+        budget_val = ai_budget
     else:
         size_val = parse_size(size)
         budget_val = parse_budget(budget)
