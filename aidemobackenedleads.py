@@ -38,19 +38,16 @@ def parse_budget(budget_input):
 
     text = str(budget_input).lower().replace(",", "").strip()
 
-    # 🚨 detect INVALID units like lb
-    if "lb" in text or "kg" in text:
-        return 0  # invalid budget input
+    # detect weight units → invalid
+    if any(x in text for x in ["lb", "lbs", "pound", "kg"]):
+        return None  # important change
 
     multiplier = 1
 
-    # currency detection
     if "€" in text or "eur" in text:
         multiplier = 1.1
     elif "£" in text or "gbp" in text:
         multiplier = 1.25
-    elif "cad" in text:
-        multiplier = 0.75
 
     nums = re.findall(r"\d+\.?\d*", text)
     if not nums:
@@ -65,37 +62,44 @@ def parse_budget(budget_input):
 
     return value * multiplier
 
-
 def parse_size(size_input):
     if not size_input:
         return 2000
 
     text = str(size_input).lower().replace(",", "").strip()
 
-    # meters (500m x 100m)
+    # normalize language
+    text = text.replace("square meters", "sqm")
+    text = text.replace("sq meters", "sqm")
+    text = text.replace("sq meter", "sqm")
+    text = text.replace("meters squared", "sqm")
+
+    # sqm handling
+    if any(x in text for x in ["sqm", "m2", "m^2"]):
+        nums = re.findall(r"\d+\.?\d*", text)
+        if nums:
+            return float(nums[0]) * 10.764
+
+    # meter dimensions
     if "m" in text and "x" in text:
         nums = re.findall(r"\d+\.?\d*", text)
         if len(nums) >= 2:
-            sqm = float(nums[0]) * float(nums[1])
-            return sqm * 10.764
+            return float(nums[0]) * float(nums[1]) * 10.764
 
-    text = text.replace("sqft", "").replace("sq ft", "").replace("ft", "").strip()
+    # sqft fallback
+    text = text.replace("sqft", "").replace("sq ft", "").replace("ft", "")
     text = re.sub(r"\s*by\s*", "x", text)
-    text = re.sub(r"\s*x\s*", "x", text)
 
     if "x" in text:
         parts = text.split("x")
         if len(parts) == 2:
             try:
-                a = float(re.findall(r"\d+\.?\d*", parts[0])[0])
-                b = float(re.findall(r"\d+\.?\d*", parts[1])[0])
-                return a * b
+                return float(parts[0]) * float(parts[1])
             except:
                 pass
 
     nums = re.findall(r"\d+\.?\d*", text)
     return float(nums[0]) if nums else 2000
-
 
 # -----------------------------
 # PROJECT TYPE + COMPLEXITY (UPGRADED)
@@ -266,13 +270,15 @@ Be realistic and practical.
             analysis_text = str(e)
 
     return jsonify({
-        "analysis": analysis_text,
+    "analysis": analysis_text,
+    "data": {
         "total_cost": round(total_cost, 2),
         "recommended_bid": round(recommended_bid, 2),
         "size_sqft": round(size_val, 2),
-        "flags": flags
-    })
-
+        "lead_score": 5,
+        "decision": "N/A"
+    }
+})
 
 if __name__ == "__main__":
     app.run(debug=True)
