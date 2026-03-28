@@ -124,11 +124,34 @@ def adjustments(materials, city, timeline, description):
 
 
 def lead_score(size, budget, cost):
+    if cost <= 0:
+        return 1
+
     score = 5
-    if budget < cost * 0.6:
+    ratio = budget / cost if budget else 0
+
+    # Budget realism
+    if budget == 0:
         score -= 3
-    elif budget > cost:
+    elif ratio < 0.5:
+        score -= 4
+    elif ratio < 0.8:
+        score -= 2
+    elif ratio <= 1.2:
+        score += 1
+    elif ratio <= 2:
         score += 2
+    elif ratio <= 5:
+        score += 3
+    else:
+        score += 4  # huge budget = very strong lead
+
+    # Project size quality
+    if size > 10000:
+        score += 1
+    elif size < 1000:
+        score -= 1
+
     return max(1, min(10, score))
 
 
