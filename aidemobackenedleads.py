@@ -221,6 +221,7 @@ def analyze():
 
         score = lead_score(size, budget, total)
         dec, reason = decision(total, budget)
+        budget_gap = budget - total
 
         # ✅ Better fallback analysis
         analysis = f"""
@@ -302,6 +303,7 @@ Keep it practical, professional, and grounded in real construction logic.
                 "budget": budget,
                 "size_sqft": size,
                 "timeline_months": months  # ✅ NEW
+                "budget_gap": budget_gap   # ✅ ADD THIS
             }
         })
 
