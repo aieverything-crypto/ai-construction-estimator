@@ -1,40 +1,40 @@
 import re
- 
- 
- def _parse_scientific_like(text: str):
-     text = text.strip().lower()
- 
-     sci = re.search(r"(\d+\.?\d*)\s*e\s*([+-]?\d+)", text)
-     if sci:
-         return float(sci.group(1)) * (10 ** int(sci.group(2)))
- 
-     power = re.search(r"(\d+\.?\d*)\s*(?:x|\*|times)?\s*10\^([+-]?\d+)", text)
-     if power:
-         return float(power.group(1)) * (10 ** int(power.group(2)))
- 
-     return None
- 
- 
- def parse_budget(text):
-     if not text:
-         return 0
- 
-     text = str(text).lower().replace(",", "").replace("$", "").strip()
- 
-     sci_value = _parse_scientific_like(text)
-     if sci_value is not None:
-         return sci_value
- 
-     multiplier = 1
-     if "billion" in text or re.search(r"\bb\b", text):
-         multiplier = 1_000_000_000
-     elif "million" in text or re.search(r"\bm\b", text):
-         multiplier = 1_000_000
-     elif "thousand" in text or re.search(r"\bk\b", text):
-         multiplier = 1_000
- 
-     nums = re.findall(r"\d+\.?\d*", text)
-     if not nums:
+
+
+def _parse_scientific_like(text: str):
+    text = text.strip().lower()
+
+    sci = re.search(r"(\d+\.?\d*)\s*e\s*([+-]?\d+)", text)
+    if sci:
+        return float(sci.group(1)) * (10 ** int(sci.group(2)))
+
+    power = re.search(r"(\d+\.?\d*)\s*(?:x|\*|times)?\s*10\^([+-]?\d+)", text)
+    if power:
+        return float(power.group(1)) * (10 ** int(power.group(2)))
+
+    return None
+
+
+def parse_budget(text):
+    if not text:
+        return 0
+
+    text = str(text).lower().replace(",", "").replace("$", "").strip()
+
+    sci_value = _parse_scientific_like(text)
+    if sci_value is not None:
+        return sci_value
+
+    multiplier = 1
+    if "billion" in text or re.search(r"\bb\b", text):
+        multiplier = 1_000_000_000
+    elif "million" in text or re.search(r"\bm\b", text):
+        multiplier = 1_000_000
+    elif "thousand" in text or re.search(r"\bk\b", text):
+        multiplier = 1_000
+
+    nums = re.findall(r"\d+\.?\d*", text)
+    if not nums:
         return 0
 
     return float(nums[0]) * multiplier
@@ -110,3 +110,4 @@ def extract_timeline_months(text):
     if weeks:
         return float(weeks.group(1)) / 4.345
 
+    return None
