@@ -27,19 +27,21 @@ def parse_budget(text):
         return 0
 
     text = str(text).lower().replace(",", "").replace("$", "").strip()
+
+    multiplier = 1
+
+    if "billion" in text or "b" in text:
+        multiplier = 1_000_000_000
+    elif "million" in text or "m" in text:
+        multiplier = 1_000_000
+    elif "thousand" in text or "k" in text:
+        multiplier = 1_000
+
     nums = re.findall(r"\d+\.?\d*", text)
-    if not nums:
-        return 0
+    if nums:
+        return float(nums[0]) * multiplier
 
-    val = float(nums[0])
-
-    if "million" in text or re.search(r"\bm\b", text):
-        val *= 1_000_000
-    elif "thousand" in text or re.search(r"\bk\b", text):
-        val *= 1_000
-
-    return val
-
+    return 0
 
 def parse_size(text):
     if not text:
@@ -47,34 +49,26 @@ def parse_size(text):
 
     text = str(text).lower().replace(",", "").strip()
 
-    # support sqm / m² / m2 -> convert to sqft
+    multiplier = 1
+
+    if "billion" in text:
+        multiplier = 1_000_000_000
+    elif "million" in text:
+        multiplier = 1_000_000
+    elif "thousand" in text:
+        multiplier = 1_000
+
+    # sqm → sqft conversion
     if "sqm" in text or "m²" in text or "m2" in text:
         nums = re.findall(r"\d+\.?\d*", text)
         if nums:
-            return float(nums[0]) * 10.7639
-
-    text = text.replace("square feet", "")
-    text = text.replace("sqft", "")
-    text = text.replace("sq ft", "")
-    text = text.replace("ft", "")
-    text = text.strip()
-
-    text = re.sub(r"\s*by\s*", "x", text)
-    text = re.sub(r"\s*x\s*", "x", text)
-
-    if "x" in text:
-        parts = text.split("x")
-        try:
-            return float(parts[0]) * float(parts[1])
-        except Exception:
-            pass
+            return float(nums[0]) * multiplier * 10.7639
 
     nums = re.findall(r"\d+\.?\d*", text)
     if nums:
-        return float(nums[0])
+        return float(nums[0]) * multiplier
 
     return 2000
-
 
 def extract_timeline_months(text):
     if not text:
