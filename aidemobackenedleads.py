@@ -7,11 +7,17 @@ import re
 app = Flask(__name__)
 CORS(app)
 
+# -----------------------------
+# OPENAI INIT (SAFE)
+# -----------------------------
 client = None
 api_key = os.getenv("OPENAI_API_KEY")
 if api_key:
     client = OpenAI(api_key=api_key)
 
+# -----------------------------
+# COST DATABASE
+# -----------------------------
 cost_per_sqft = {
     "residential": (180, 350),
     "commercial": (220, 500),
@@ -20,7 +26,7 @@ cost_per_sqft = {
 }
 
 # -----------------------------
-# PARSERS
+# PARSERS (FIXED)
 # -----------------------------
 def parse_budget(text):
     if not text:
@@ -30,11 +36,11 @@ def parse_budget(text):
 
     multiplier = 1
 
-    if "billion" in text or "b" in text:
+    if "billion" in text or re.search(r"\bb\b", text):
         multiplier = 1_000_000_000
-    elif "million" in text or "m" in text:
+    elif "million" in text or re.search(r"\bm\b", text):
         multiplier = 1_000_000
-    elif "thousand" in text or "k" in text:
+    elif "thousand" in text or re.search(r"\bk\b", text):
         multiplier = 1_000
 
     nums = re.findall(r"\d+\.?\d*", text)
@@ -42,6 +48,7 @@ def parse_budget(text):
         return float(nums[0]) * multiplier
 
     return 0
+
 
 def parse_size(text):
     if not text:
@@ -64,17 +71,29 @@ def parse_size(text):
         if nums:
             return float(nums[0]) * multiplier * 10.7639
 
+    # 30x50 format
+    text = re.sub(r"\s*by\s*", "x", text)
+    text = re.sub(r"\s*x\s*", "x", text)
+
+    if "x" in text:
+        parts = text.split("x")
+        try:
+            return float(parts[0]) * float(parts[1])
+        except:
+            pass
+
     nums = re.findall(r"\d+\.?\d*", text)
     if nums:
         return float(nums[0]) * multiplier
 
     return 2000
 
+
 def extract_timeline_months(text):
     if not text:
         return None
 
-    text = str(text).lower().strip()
+    text = text.lower()
 
     m = re.search(r"(\d+\.?\d*)\s*month", text)
     if m:
@@ -90,25 +109,18 @@ def extract_timeline_months(text):
 
     return None
 
-
 # -----------------------------
 # LOGIC
 # -----------------------------
 def detect_project_type(project, description):
-    text = f"{project or ''} {description or ''}".lower()
+    text = f"{project} {description}".lower()
 
-    if any(word in text for word in ["warehouse", "factory", "industrial", "plant"]):
+    if any(x in text for x in ["warehouse", "factory"]):
         return "industrial"
-
-    if any(word in text for word in [
-        "office", "retail", "store", "restaurant", "apartment",
-        "complex", "multifamily", "mixed use", "commercial"
-    ]):
+    if any(x in text for x in ["office", "retail", "apartment", "complex"]):
         return "commercial"
-
-    if any(word in text for word in ["remodel", "renovation", "tenant improvement", "addition"]):
+    if "remodel" in text:
         return "remodel"
-
     return "residential"
 
 
@@ -118,39 +130,25 @@ def adjustments(materials, city, timeline, description):
     t = 1.0
     s = 1.0
 
-    materials_text = (materials or "").lower()
-    city_text = (city or "").lower()
-    description_text = (description or "").lower()
-
-    if "steel" in materials_text:
+    if "steel" in materials.lower():
         m += 0.15
-    if "concrete" in materials_text:
-        m += 0.10
-    if "luxury" in materials_text or "premium" in materials_text or "high end" in materials_text:
-        m += 0.20
-    if "typical" in materials_text:
-        m += 0.02
+    if "luxury" in materials.lower():
+        m += 0.2
 
-    if any(x in city_text for x in ["san francisco", "los angeles", "new york", "seattle", "boston"]):
-        l += 0.30
-    elif any(x in city_text for x in ["las vegas", "san diego", "san jose", "sacramento"]):
-        l += 0.10
+    if any(x in city.lower() for x in ["san francisco", "new york"]):
+        l += 0.3
+    elif any(x in city.lower() for x in ["las vegas"]):
+        l += 0.1
 
     months = extract_timeline_months(timeline)
     if months:
         if months < 6:
             t += 0.15
-        elif months < 12:
-            t += 0.08
         elif months > 36:
-            t -= 0.03
+            t -= 0.05
 
-    if any(x in description_text for x in ["slope", "steep", "hillside"]):
-        s += 0.20
-    if any(x in description_text for x in ["tight lot", "urban infill", "limited access"]):
-        s += 0.10
-    if any(x in description_text for x in ["outside of", "outskirts"]):
-        s += 0.02
+    if any(x in description.lower() for x in ["slope", "steep"]):
+        s += 0.2
 
     return m, l, t, s
 
@@ -160,7 +158,7 @@ def lead_score(size, budget, cost):
         return 1
 
     score = 5
-    ratio = (budget / cost) if budget else 0
+    ratio = budget / cost if budget else 0
 
     if budget == 0:
         score -= 3
@@ -189,143 +187,97 @@ def decision(total, budget):
     if budget == 0:
         return "NEGOTIATE", "No budget provided"
 
-    ratio = budget / total if total else 0
+    r = budget / total
 
-    if ratio < 0.6:
-        return "REJECT", "Budget too low versus expected cost"
-    elif ratio < 0.9:
-        return "NEGOTIATE", "Budget below expected cost"
-    elif ratio <= 1.3:
-        return "TAKE JOB", "Budget aligns with expected cost"
+    if r < 0.6:
+        return "REJECT", "Budget too low"
+    elif r < 0.9:
+        return "NEGOTIATE", "Below expected cost"
+    elif r <= 1.3:
+        return "TAKE JOB", "Good alignment"
     else:
-        return "HIGH VALUE", "Strong margin potential"
+        return "HIGH VALUE", "High profit"
 
 
-def color(d):
-    return {
-        "TAKE JOB": "green",
-        "NEGOTIATE": "yellow",
-        "REJECT": "red",
-        "HIGH VALUE": "blue"
-    }.get(d, "gray")
+def risk_score(budget, cost, months):
+    risk = 5
 
-
-def risk_score(budget, cost, timeline_months, materials, description):
-    risk = 4
-
-    ratio = (budget / cost) if (budget and cost) else 0
-
-    if budget and budget < cost:
+    if budget < cost:
         risk += 3
-    elif ratio > 5:
-        risk += 1
-
-    if timeline_months:
-        if timeline_months < 6:
-            risk += 2
-        elif timeline_months > 48:
-            risk += 1
-
-    materials_text = (materials or "").lower()
-    description_text = (description or "").lower()
-
-    if "luxury" in materials_text or "premium" in materials_text:
-        risk += 1
-
-    if any(x in description_text for x in ["slope", "steep", "hillside", "limited access"]):
+    if months and months < 6:
         risk += 2
+    if months and months > 60:
+        risk += 1
 
-    return max(1, min(10, risk))
+    return min(10, risk)
 
 
 def deal_score(budget, cost, risk, margin):
     score = 5
-    ratio = (budget / cost) if cost else 0
+    ratio = budget / cost if cost else 0
 
     if ratio > 2:
         score += 2
-    elif ratio >= 1:
-        score += 1
-    else:
-        score -= 2
-
     if margin > 20:
         score += 2
-    elif margin > 12:
-        score += 1
-    elif margin < 8:
-        score -= 1
-
     if risk > 7:
         score -= 2
-    elif risk <= 4:
-        score += 1
 
     return max(1, min(10, score))
 
 
-def build_flags(budget, cost, timeline_months, materials, description, size):
+def build_flags(budget, cost, months, materials, description):
     flags = []
 
-    ratio = (budget / cost) if (budget and cost) else 0
-    materials_text = (materials or "").lower()
-    description_text = (description or "").lower()
+    if budget > cost * 5:
+        flags.append("Budget far exceeds cost — verify scope")
 
-    if ratio > 5:
-        flags.append("Budget is far above expected cost; verify scope, land cost, or hidden owner expectations.")
+    if budget < cost:
+        flags.append("Budget below estimated cost")
 
-    if budget and budget < cost:
-        flags.append("Budget is below estimated cost; expect scope reduction or negotiation pressure.")
+    if months and months > 60:
+        flags.append("Timeline unusually long")
 
-    if timeline_months and timeline_months > 48:
-        flags.append("Timeline is unusually long; this may indicate phased construction, financing risk, or scheduling uncertainty.")
+    if "luxury" in materials.lower():
+        flags.append("Luxury materials increase volatility")
 
-    if timeline_months and timeline_months < 6:
-        flags.append("Timeline is very aggressive; labor premiums and coordination risk are likely.")
-
-    if "luxury" in materials_text or "premium" in materials_text:
-        flags.append("Luxury materials increase procurement volatility and finish-quality risk.")
-
-    if any(x in description_text for x in ["slope", "steep", "hillside", "limited access"]):
-        flags.append("Site conditions may increase excavation, access, and foundation complexity.")
-
-    if size > 50000:
-        flags.append("Large project scale increases coordination, staging, and subcontractor management risk.")
+    if "slope" in description.lower():
+        flags.append("Slope increases construction complexity")
 
     return flags
 
 
 # -----------------------------
-# ROUTES
+# ROUTE
 # -----------------------------
 @app.route("/")
 def home():
-    return {"status": "API running - intelligence system live"}
-
+    return {"status": "AI estimator running"}
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
-        data = request.json or {}
+        data = request.json
 
-        project = data.get("project", "")
-        size_raw = data.get("size", "")
-        materials = data.get("materials", "")
-        budget_raw = data.get("budget", "")
-        timeline_raw = data.get("timeline", "")
-        city = data.get("city", "")
-        description = data.get("description", "")
+        size = parse_size(data.get("size"))
+        budget = parse_budget(data.get("budget"))
+        months = extract_timeline_months(data.get("timeline"))
 
-        size = parse_size(size_raw)
-        budget = parse_budget(budget_raw)
-        months = extract_timeline_months(timeline_raw)
-
-        project_type = detect_project_type(project, description)
+        project_type = detect_project_type(
+            data.get("project"),
+            data.get("description")
+        )
 
         low, high = cost_per_sqft[project_type]
         base = ((low + high) / 2) * size
 
-        m, l, t, s = adjustments(materials, city, timeline_raw, description)
+        m, l, t, s = adjustments(
+            data.get("materials", ""),
+            data.get("city", ""),
+            data.get("timeline", ""),
+            data.get("description", "")
+        )
+
         total = base * m * l * t * s
 
         material = total * 0.45
@@ -335,94 +287,50 @@ def analyze():
         agg = total * 1.18
         minb = total * 1.10
 
-        budget_gap = (budget - total) if budget else 0
-        budget_ratio = (budget / total) if total and budget else 0
+        budget_gap = budget - total if budget else 0
+        budget_ratio = budget / total if total else 0
 
-        profit_low = minb - total
         profit_mid = rec - total
-        profit_high = agg - total
-        margin_mid = ((profit_mid / rec) * 100) if rec else 0
+        margin_mid = (profit_mid / rec) * 100 if rec else 0
 
         score = lead_score(size, budget, total)
         dec, reason = decision(total, budget)
-        risk = risk_score(budget, total, months, materials, description)
+
+        risk = risk_score(budget, total, months)
         deal = deal_score(budget, total, risk, margin_mid)
-        flags = build_flags(budget, total, months, materials, description, size)
+        flags = build_flags(budget, total, months, data.get("materials",""), data.get("description",""))
 
         analysis = f"""
 Project Type: {project_type}
-Size: {round(size):,} sqft
 Estimated Cost: ${round(total):,}
-Timeline: {round(months, 1) if months else "N/A"} months
-
 Decision: {dec}
-Reason: {reason}
+"""
 
-Expected Profit: ${round(profit_mid):,}
-Expected Margin: {round(margin_mid, 1)}%
-Risk Score: {risk}/10
-Deal Score: {deal}/10
-""".strip()
-
+        # AI REPORT
         if client:
             try:
                 prompt = f"""
-You are a senior construction estimator writing a contractor-facing report.
+Write a professional contractor report.
 
-STRICT RULES:
-- Use ONLY the values below
-- DO NOT invent any numbers
-- DO NOT change units
-- Keep the report practical and contractor-focused
+Use these exact values:
+Cost: {round(total)}
+Budget: {round(budget)}
+Decision: {dec}
+Risk: {risk}/10
+Profit: {round(profit_mid)}
 
-PROJECT DATA:
-- Project Name: {project}
-- Project Type: {project_type}
-- Size: {round(size):,} sqft
-- Location: {city}
-- Materials: {materials}
-- Budget: ${round(budget):,}
-- Estimated Cost: ${round(total):,}
-- Material Cost: ${round(material):,}
-- Labor Cost: ${round(labor):,}
-- Timeline: {round(months, 1) if months else "unknown"} months
-- Recommended Bid: ${round(rec):,}
-- Aggressive Bid: ${round(agg):,}
-- Minimum Bid: ${round(minb):,}
-- Budget Gap: ${round(budget_gap):,}
-- Budget Ratio: {round(budget_ratio, 2)}x
-- Lead Score: {score}/10
-- Decision: {dec}
-- Risk Score: {risk}/10
-- Deal Score: {deal}/10
-- Expected Profit at Recommended Bid: ${round(profit_mid):,}
-- Expected Margin at Recommended Bid: {round(margin_mid, 1)}%
-- Red Flags: {"; ".join(flags) if flags else "None"}
-
-Write under these exact headings:
-
-## 1. Cost Realism
-## 2. Key Cost Drivers
-## 3. Contractor Decision
-## 4. Profit Outlook
-## 5. Risk Level
-## 6. Bid Strategy
-## 7. Red Flags
-
-Be specific, practical, and grounded in these numbers.
+Include:
+- Cost realism
+- Risks
+- Bid strategy
 """
                 res = client.chat.completions.create(
                     model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a practical construction estimator and bid advisor."},
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=[{"role":"user","content":prompt}],
                     temperature=0.4
                 )
-                ai_text = res.choices[0].message.content
-                if ai_text and ai_text.strip():
-                    analysis = ai_text.strip()
-            except Exception:
+                analysis = res.choices[0].message.content
+            except:
                 pass
 
         return jsonify({
@@ -446,9 +354,7 @@ Be specific, practical, and grounded in these numbers.
                 "risk_score": risk,
                 "deal_score": deal,
                 "profit": {
-                    "min_profit": profit_low,
                     "expected_profit": profit_mid,
-                    "max_profit": profit_high,
                     "margin_percent": margin_mid
                 },
                 "flags": flags
