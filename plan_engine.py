@@ -45,7 +45,7 @@ def analyze_uploaded_plan(client, file_obj):
                     messages=[
                         {
                             "role": "system",
-                            "content": "You extract structured construction data from architectural plans and engineering documents."
+                            "content": "You extract detailed structured construction intelligence from architectural plans."
                         },
                         {
                             "role": "user",
@@ -55,11 +55,36 @@ Analyze this construction plan text and return ONLY valid JSON:
 {{
   "project_type": "...",
   "estimated_size_sqft": number,
+
+  "area_breakdown": {{
+    "living_sqft": number,
+    "garage_sqft": number,
+    "total_sqft": number
+  }},
+
+  "stories": number,
+  "construction_type": "...",
+
   "materials_hint": "...",
+
+  "complexity_factors": [...],
+
+  "location_data": {{
+    "city": "...",
+    "seismic_category": "...",
+    "flood_zone": "..."
+  }},
+
+  "risk_flags": [...],
+
   "notes": "..."
 }}
 
-Be conservative and realistic.
+Rules:
+- Be conservative and realistic
+- Use real values if present in text
+- If unknown, estimate intelligently
+- DO NOT include explanations, ONLY JSON
 
 TEXT:
 {extracted_text[:15000]}
@@ -82,9 +107,8 @@ TEXT:
                     "parsed": parsed
                 }
 
-            except Exception as e:
-                # fallback to image path
-                pass
+            except Exception:
+                pass  # fallback to image
 
     # =====================================
     # PATH 2 — IMAGE ANALYSIS (FALLBACK)
@@ -97,7 +121,7 @@ TEXT:
             messages=[
                 {
                     "role": "system",
-                    "content": "You extract structured construction data from drawings and plans."
+                    "content": "You extract structured construction data from drawings."
                 },
                 {
                     "role": "user",
@@ -113,8 +137,6 @@ Analyze this plan and return ONLY valid JSON:
   "materials_hint": "...",
   "notes": "..."
 }
-
-Be conservative and realistic.
 """
                         },
                         {
