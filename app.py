@@ -5,36 +5,36 @@ import os
 
 from parsers import parse_budget, parse_size, extract_timeline_months
 from cost_engine import (
-     cost_per_sqft,
-     detect_project_type,
-     adjustments,
-     build_cost_summary
- )
+    cost_per_sqft,
+    detect_project_type,
+    adjustments,
+    build_cost_summary
+)
 from decision_engine import (
-     color,
-     lead_score,
-     decision,
-     risk_score,
-     deal_score,
-     build_flags
- )
- from ai_engine import build_fallback_analysis, build_ai_analysis
- from plan_engine import analyze_uploaded_plan
- 
- app = Flask(__name__)
- CORS(app)
- 
- client = None
- api_key = os.getenv("OPENAI_API_KEY")
- if api_key:
-     client = OpenAI(api_key=api_key)
- 
- 
- @app.route("/")
- def home():
-     return {"status": "construction intelligence system running"}
- 
- 
+    color,
+    lead_score,
+    decision,
+    risk_score,
+    deal_score,
+    build_flags
+)
+from ai_engine import build_fallback_analysis, build_ai_analysis
+from plan_engine import analyze_uploaded_plan
+
+app = Flask(__name__)
+CORS(app)
+
+client = None
+api_key = os.getenv("OPENAI_API_KEY")
+if api_key:
+    client = OpenAI(api_key=api_key)
+
+
+@app.route("/")
+def home():
+    return {"status": "construction intelligence system running"}
+
+
 @app.route("/analyze-plan", methods=["POST"])
 def analyze_plan():
     try:
@@ -226,3 +226,4 @@ def analyze():
 
 
 if __name__ == "__main__":
+    app.run(debug=True)
