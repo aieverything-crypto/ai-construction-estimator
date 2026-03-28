@@ -21,22 +21,29 @@ def parse_budget(text):
 
     text = str(text).lower().replace(",", "").replace("$", "").strip()
 
-    sci_value = _parse_scientific_like(text)
-    if sci_value is not None:
-        return sci_value
-
-    multiplier = 1
-    if "billion" in text or re.search(r"\bb\b", text):
+    # Handle full words FIRST
+    if "billion" in text:
         multiplier = 1_000_000_000
-    elif "million" in text or re.search(r"\bm\b", text):
+    elif "million" in text:
         multiplier = 1_000_000
-    elif "thousand" in text or re.search(r"\bk\b", text):
+    elif "thousand" in text:
+        multiplier = 1_000
+    else:
+        multiplier = 1
+
+    # Handle shorthand AFTER (this was your bug)
+    if "b" in text and "billion" not in text:
+        multiplier = 1_000_000_000
+    elif "m" in text and "million" not in text:
+        multiplier = 1_000_000
+    elif "k" in text:
         multiplier = 1_000
 
     nums = re.findall(r"\d+\.?\d*", text)
     if not nums:
         return 0
 
+    return float(nums[0]) * multiplier
     return float(nums[0]) * multiplier
 
 
