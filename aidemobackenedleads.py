@@ -26,14 +26,24 @@ cost_per_sqft = {
 }
 
 # -----------------------------
-# PARSERS (FIXED)
+# HELPERS
+# -----------------------------
+def color(decision):
+    return {
+        "TAKE JOB": "green",
+        "NEGOTIATE": "yellow",
+        "REJECT": "red",
+        "HIGH VALUE": "blue"
+    }.get(decision, "gray")
+
+# -----------------------------
+# PARSERS
 # -----------------------------
 def parse_budget(text):
     if not text:
         return 0
 
     text = str(text).lower().replace(",", "").replace("$", "").strip()
-
     multiplier = 1
 
     if "billion" in text or re.search(r"\bb\b", text):
@@ -55,7 +65,6 @@ def parse_size(text):
         return 2000
 
     text = str(text).lower().replace(",", "").strip()
-
     multiplier = 1
 
     if "billion" in text:
@@ -65,13 +74,12 @@ def parse_size(text):
     elif "thousand" in text:
         multiplier = 1_000
 
-    # sqm → sqft conversion
     if "sqm" in text or "m²" in text or "m2" in text:
         nums = re.findall(r"\d+\.?\d*", text)
         if nums:
             return float(nums[0]) * multiplier * 10.7639
 
-    # 30x50 format
+    text = text.replace("square feet", "").replace("sqft", "").replace("sq ft", "").replace("ft", "")
     text = re.sub(r"\s*by\s*", "x", text)
     text = re.sub(r"\s*x\s*", "x", text)
 
@@ -79,7 +87,7 @@ def parse_size(text):
         parts = text.split("x")
         try:
             return float(parts[0]) * float(parts[1])
-        except:
+        except Exception:
             pass
 
     nums = re.findall(r"\d+\.?\d*", text)
@@ -93,7 +101,7 @@ def extract_timeline_months(text):
     if not text:
         return None
 
-    text = text.lower()
+    text = str(text).lower()
 
     m = re.search(r"(\d+\.?\d*)\s*month", text)
     if m:
@@ -113,11 +121,11 @@ def extract_timeline_months(text):
 # LOGIC
 # -----------------------------
 def detect_project_type(project, description):
-    text = f"{project} {description}".lower()
+    text = f"{project or ''} {description or ''}".lower()
 
-    if any(x in text for x in ["warehouse", "factory"]):
+    if any(x in text for x in ["warehouse", "factory", "industrial", "plant"]):
         return "industrial"
-    if any(x in text for x in ["office", "retail", "apartment", "complex"]):
+    if any(x in text for x in ["office", "retail", "apartment", "complex", "commercial", "mixed use"]):
         return "commercial"
     if "remodel" in text:
         return "remodel"
@@ -130,15 +138,21 @@ def adjustments(materials, city, timeline, description):
     t = 1.0
     s = 1.0
 
-    if "steel" in materials.lower():
-        m += 0.15
-    if "luxury" in materials.lower():
-        m += 0.2
+    materials_text = (materials or "").lower()
+    city_text = (city or "").lower()
+    description_text = (description or "").lower()
 
-    if any(x in city.lower() for x in ["san francisco", "new york"]):
-        l += 0.3
-    elif any(x in city.lower() for x in ["las vegas"]):
-        l += 0.1
+    if "steel" in materials_text:
+        m += 0.15
+    if "luxury" in materials_text:
+        m += 0.20
+    if "concrete" in materials_text:
+        m += 0.10
+
+    if any(x in city_text for x in ["san francisco", "new york", "dubai", "seattle", "boston"]):
+        l += 0.30
+    elif "las vegas" in city_text:
+        l += 0.10
 
     months = extract_timeline_months(timeline)
     if months:
@@ -147,8 +161,8 @@ def adjustments(materials, city, timeline, description):
         elif months > 36:
             t -= 0.05
 
-    if any(x in description.lower() for x in ["slope", "steep"]):
-        s += 0.2
+    if any(x in description_text for x in ["slope", "steep", "hillside"]):
+        s += 0.20
 
     return m, l, t, s
 
@@ -187,7 +201,7 @@ def decision(total, budget):
     if budget == 0:
         return "NEGOTIATE", "No budget provided"
 
-    r = budget / total
+    r = budget / total if total else 0
 
     if r < 0.6:
         return "REJECT", "Budget too low"
@@ -196,7 +210,7 @@ def decision(total, budget):
     elif r <= 1.3:
         return "TAKE JOB", "Good alignment"
     else:
-        return "HIGH VALUE", "High profit"
+        return "HIGH VALUE", "High profit potential"
 
 
 def risk_score(budget, cost, months):
@@ -230,25 +244,20 @@ def build_flags(budget, cost, months, materials, description):
     flags = []
 
     if budget > cost * 5:
-        flags.append("Budget far exceeds cost — verify scope")
-
+        flags.append("Budget far exceeds cost — verify scope.")
     if budget < cost:
-        flags.append("Budget below estimated cost")
-
+        flags.append("Budget below estimated cost.")
     if months and months > 60:
-        flags.append("Timeline unusually long")
-
-    if "luxury" in materials.lower():
-        flags.append("Luxury materials increase volatility")
-
-    if "slope" in description.lower():
-        flags.append("Slope increases construction complexity")
+        flags.append("Timeline unusually long.")
+    if "luxury" in (materials or "").lower():
+        flags.append("Luxury materials increase volatility.")
+    if "slope" in (description or "").lower():
+        flags.append("Slope increases construction complexity.")
 
     return flags
 
-
 # -----------------------------
-# ROUTE
+# ROUTES
 # -----------------------------
 @app.route("/")
 def home():
@@ -257,7 +266,7 @@ def home():
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
-        data = request.json
+        data = request.get_json(force=True) or {}
 
         size = parse_size(data.get("size"))
         budget = parse_budget(data.get("budget"))
@@ -290,48 +299,74 @@ def analyze():
         budget_gap = budget - total if budget else 0
         budget_ratio = budget / total if total else 0
 
+        profit_min = minb - total
         profit_mid = rec - total
+        profit_max = agg - total
         margin_mid = (profit_mid / rec) * 100 if rec else 0
 
         score = lead_score(size, budget, total)
         dec, reason = decision(total, budget)
-
         risk = risk_score(budget, total, months)
         deal = deal_score(budget, total, risk, margin_mid)
-        flags = build_flags(budget, total, months, data.get("materials",""), data.get("description",""))
+        flags = build_flags(budget, total, months, data.get("materials", ""), data.get("description", ""))
 
-        analysis = f"""
-Project Type: {project_type}
+        analysis = f"""Project Type: {project_type}
 Estimated Cost: ${round(total):,}
+Budget: ${round(budget):,}
 Decision: {dec}
-"""
+Reason: {reason}
+Expected Profit: ${round(profit_mid):,}
+Risk: {risk}/10
+Deal Score: {deal}/10"""
 
-        # AI REPORT
         if client:
             try:
                 prompt = f"""
-Write a professional contractor report.
+You are a senior construction estimator.
 
-Use these exact values:
-Cost: {round(total)}
-Budget: {round(budget)}
+Use ONLY these values:
+Project Type: {project_type}
+Size: {round(size):,} sqft
+Budget: ${round(budget):,}
+Estimated Cost: ${round(total):,}
+Material Cost: ${round(material):,}
+Labor Cost: ${round(labor):,}
+Timeline: {round(months,1) if months else "unknown"} months
+Recommended Bid: ${round(rec):,}
+Aggressive Bid: ${round(agg):,}
+Minimum Bid: ${round(minb):,}
+Budget Gap: ${round(budget_gap):,}
+Budget Ratio: {round(budget_ratio,2)}x
+Lead Score: {score}/10
 Decision: {dec}
-Risk: {risk}/10
-Profit: {round(profit_mid)}
+Risk Score: {risk}/10
+Deal Score: {deal}/10
+Expected Profit: ${round(profit_mid):,}
+Margin: {round(margin_mid,1)}%
+Red Flags: {"; ".join(flags) if flags else "None"}
 
-Include:
-- Cost realism
-- Risks
-- Bid strategy
+Write under these headings:
+## 1. Cost Realism
+## 2. Key Cost Drivers
+## 3. Contractor Decision
+## 4. Profit Outlook
+## 5. Risk Level
+## 6. Bid Strategy
+## 7. Red Flags
 """
                 res = client.chat.completions.create(
                     model="gpt-4o-mini",
-                    messages=[{"role":"user","content":prompt}],
+                    messages=[
+                        {"role": "system", "content": "You are a practical construction estimator and bid advisor."},
+                        {"role": "user", "content": prompt}
+                    ],
                     temperature=0.4
                 )
-                analysis = res.choices[0].message.content
-            except:
-                pass
+                ai_text = res.choices[0].message.content
+                if ai_text and ai_text.strip():
+                    analysis = ai_text.strip()
+            except Exception as openai_error:
+                print("OpenAI error:", openai_error)
 
         return jsonify({
             "analysis": analysis,
@@ -354,7 +389,9 @@ Include:
                 "risk_score": risk,
                 "deal_score": deal,
                 "profit": {
+                    "min_profit": profit_min,
                     "expected_profit": profit_mid,
+                    "max_profit": profit_max,
                     "margin_percent": margin_mid
                 },
                 "flags": flags
@@ -362,6 +399,7 @@ Include:
         })
 
     except Exception as e:
+        print("Analyze error:", e)
         return jsonify({"error": str(e)}), 500
 
 
