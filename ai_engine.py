@@ -1,39 +1,39 @@
 def build_fallback_analysis(
-     project,
-     city,
-     project_type,
-     size_sqft,
-     total_cost,
-     timeline_months,
-     decision_label,
-     decision_reason,
-     expected_profit,
-     margin_percent,
-     risk,
-     deal,
-     flags
- ):
-     flags_text = "\n".join([f"- {f}" for f in flags]) if flags else "- No major red flags detected."
- 
-     return f"""
- Project: {project or "N/A"}
- Project Type: {project_type}
- Location: {city or "N/A"}
- Size: {round(size_sqft):,} sqft
- Estimated Cost: ${round(total_cost):,}
- Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
- 
- Decision: {decision_label}
- Reason: {decision_reason}
- 
- Expected Profit: ${round(expected_profit):,}
- Expected Margin: {round(margin_percent, 1)}%
- Risk Score: {risk}/10
- Deal Score: {deal}/10
- 
- Red Flags:
- {flags_text}
- """.strip()
+    project,
+    city,
+    project_type,
+    size_sqft,
+    total_cost,
+    timeline_months,
+    decision_label,
+    decision_reason,
+    expected_profit,
+    margin_percent,
+    risk,
+    deal,
+    flags
+):
+    flags_text = "\n".join([f"- {f}" for f in flags]) if flags else "- No major red flags detected."
+
+    return f"""
+Project: {project or "N/A"}
+Project Type: {project_type}
+Location: {city or "N/A"}
+Size: {round(size_sqft):,} sqft
+Estimated Cost: ${round(total_cost):,}
+Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
+
+Decision: {decision_label}
+Reason: {decision_reason}
+
+Expected Profit: ${round(expected_profit):,}
+Expected Margin: {round(margin_percent, 1)}%
+Risk Score: {risk}/10
+Deal Score: {deal}/10
+
+Red Flags:
+{flags_text}
+""".strip()
 
 
 def build_ai_analysis(
@@ -132,3 +132,4 @@ Be specific, realistic, and useful to a contractor deciding whether to pursue th
         return content.strip() if content and content.strip() else None
     except Exception as e:
         print("AI analysis error:", e)
+        return None
