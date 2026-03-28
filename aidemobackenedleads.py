@@ -302,7 +302,7 @@ Keep it practical, professional, and grounded in real construction logic.
                 "decision_color": color(dec),
                 "budget": budget,
                 "size_sqft": size,
-                "timeline_months": months  # ✅ NEW
+                "timeline_months": months,  # ✅ NEW
                 "budget_gap": budget_gap   # ✅ ADD THIS
             }
         })
