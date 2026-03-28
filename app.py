@@ -1,8 +1,3 @@
->>> from flask import Flask, request, jsonify
-... from flask_cors import CORS
-... from openai import OpenAI
-... import os
-... 
 ... from parsers import parse_budget, parse_size, extract_timeline_months
 ... from cost_engine import (
 ...     cost_per_sqft,
