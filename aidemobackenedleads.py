@@ -3,25 +3,15 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 import re
-import json
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
-# -----------------------------
-# OPENAI INIT
-# -----------------------------
 client = None
-try:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        client = OpenAI(api_key=api_key)
-except Exception as e:
-    print("OpenAI init error:", e)
+api_key = os.getenv("OPENAI_API_KEY")
+if api_key:
+    client = OpenAI(api_key=api_key)
 
-# -----------------------------
-# BASE COST DATABASE ($ / sqft)
-# -----------------------------
 cost_per_sqft = {
     "residential": (180, 350),
     "commercial": (220, 500),
@@ -30,536 +20,244 @@ cost_per_sqft = {
 }
 
 # -----------------------------
-# MARKET-DATA-READY TUNING
-# Update these periodically from BLS/BEA later
-# -----------------------------
-MARKET_FACTORS = {
-    "materials_index": 1.00,   # hook for BLS PPI
-    "labor_index": 1.00,       # hook for BLS ECI / wage trend
-    "general_inflation": 1.00  # hook for future escalation
-}
-
-# -----------------------------
-# AI NORMALIZATION
-# Converts messy human input into cleaner structured values.
-# -----------------------------
-def normalize_inputs_with_ai(project, size, materials, budget, timeline, city, description):
-    if not client:
-        return None
-
-    user_input = f"""
-Project: {project}
-Size: {size}
-Materials: {materials}
-Budget: {budget}
-Timeline: {timeline}
-Location: {city}
-Description: {description}
-"""
-
-    prompt = f"""
-Convert this construction project input into JSON.
-
-Rules:
-- Convert all size inputs to square feet
-- Convert all money inputs to USD
-- Convert timeline to months
-- If budget is invalid or not money, return null for budget_usd
-- Preserve the location text
-- Infer project category from context if possible
-
-Return ONLY JSON in this shape:
-{{
-  "size_sqft": number or null,
-  "budget_usd": number or null,
-  "timeline_months": number or null,
-  "location_text": string or null,
-  "project_category": string or null
-}}
-
-Input:
-{user_input}
-"""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-        return json.loads(response.choices[0].message.content)
-    except Exception as e:
-        print("AI normalization failed:", e)
-        return None
-
-# -----------------------------
-# PARSE BUDGET
-# Handles:
-# 10^6 dollars
-# 1e6
-# 5 times 10 to the 7 usd
-# 50 million
-# 10M
+# PARSERS
 # -----------------------------
 def parse_budget(text):
     if not text:
         return 0
-
-    text = str(text).lower().replace(",", "").strip()
-
-    # invalid weight units for money
-    if any(x in text for x in [" lb", " lbs", " pound", " pounds", " kg", " kilogram", " kilograms"]):
-        return None
-
-    # currency multipliers to USD (simple approximation)
-    currency_multiplier = 1.0
-    if "€" in text or " eur" in text or " euro" in text:
-        currency_multiplier = 1.08
-    elif "£" in text or " gbp" in text or " pound sterling" in text:
-        currency_multiplier = 1.27
-    elif " cad" in text or "canadian dollar" in text:
-        currency_multiplier = 0.74
-    elif " aud" in text or "australian dollar" in text:
-        currency_multiplier = 0.66
-    elif " jpy" in text or " yen" in text:
-        currency_multiplier = 0.0067
-
-    # 5 times 10 to the 7
-    m = re.search(r"(\d+\.?\d*)\s*(times|x)\s*10\s*(to the|\^)\s*(\d+)", text)
-    if m:
-        base = float(m.group(1))
-        exponent = int(m.group(4))
-        return base * (10 ** exponent) * currency_multiplier
-
-    # 10^6
-    m = re.search(r"(\d+\.?\d*)\s*\^\s*(\d+)", text)
-    if m:
-        base = float(m.group(1))
-        exponent = int(m.group(2))
-        return (base ** exponent) * currency_multiplier
-
-    # 1e6
-    m = re.search(r"(\d+\.?\d*)e(\d+)", text)
-    if m:
-        base = float(m.group(1))
-        exponent = int(m.group(2))
-        return base * (10 ** exponent) * currency_multiplier
-
+    text = str(text).lower().replace(",", "").replace("$", "")
     nums = re.findall(r"\d+\.?\d*", text)
     if not nums:
         return 0
+    val = float(nums[0])
+    if "m" in text or "million" in text:
+        val *= 1_000_000
+    elif "k" in text or "thousand" in text:
+        val *= 1000
+    return val
 
-    value = float(nums[0])
 
-    if any(x in text for x in ["billion", " bn", " b "]):
-        value *= 1_000_000_000
-    elif any(x in text for x in ["million", " mm", " m "]):
-        value *= 1_000_000
-    elif any(x in text for x in ["thousand", " k "]):
-        value *= 1_000
-
-    return value * currency_multiplier
-
-# -----------------------------
-# PARSE SIZE
-# Handles:
-# 3780 meters squared
-# 3000 meter to the power of 2
-# 3000 sqm / m2 / m^2
-# 30x50 ft
-# 30 by 50
-# -----------------------------
 def parse_size(text):
     if not text:
         return 2000
 
-    raw = str(text).lower().replace(",", "").strip()
+    text = str(text).lower().replace(",", "")
+    text = text.replace("sqft", "").replace("sq ft", "").replace("ft", "")
+    text = re.sub(r"\s*by\s*", "x", text)
+    text = re.sub(r"\s*x\s*", "x", text)
 
-    normalized = raw
-    normalized = normalized.replace("meters squared", "sqm")
-    normalized = normalized.replace("meter squared", "sqm")
-    normalized = normalized.replace("meters square", "sqm")
-    normalized = normalized.replace("meter square", "sqm")
-    normalized = normalized.replace("square meters", "sqm")
-    normalized = normalized.replace("square meter", "sqm")
-    normalized = normalized.replace("sq meters", "sqm")
-    normalized = normalized.replace("sq meter", "sqm")
-    normalized = normalized.replace("meter to the power of 2", "sqm")
-    normalized = normalized.replace("meters to the power of 2", "sqm")
-    normalized = normalized.replace("m^2", "sqm")
-    normalized = normalized.replace("m2", "sqm")
+    if "x" in text:
+        parts = text.split("x")
+        try:
+            return float(parts[0]) * float(parts[1])
+        except:
+            pass
 
-    # direct sqm
-    if "sqm" in normalized:
-        nums = re.findall(r"\d+\.?\d*", normalized)
-        if nums:
-            return float(nums[0]) * 10.7639
-
-    # metric dimensions like 20m x 30m
-    if "x" in normalized and "m" in normalized:
-        nums = re.findall(r"\d+\.?\d*", normalized)
-        if len(nums) >= 2:
-            sqm = float(nums[0]) * float(nums[1])
-            return sqm * 10.7639
-
-    # imperial dimensions
-    tmp = normalized.replace("square feet", "sqft")
-    tmp = tmp.replace("square foot", "sqft")
-    tmp = tmp.replace("sq ft", "sqft")
-    tmp = tmp.replace("feet", "ft")
-    tmp = tmp.replace("foot", "ft")
-    tmp = re.sub(r"\s*by\s*", "x", tmp)
-    tmp = re.sub(r"\s*x\s*", "x", tmp)
-
-    if "x" in tmp:
-        nums = re.findall(r"\d+\.?\d*", tmp)
-        if len(nums) >= 2:
-            return float(nums[0]) * float(nums[1])
-
-    nums = re.findall(r"\d+\.?\d*", tmp)
-    return float(nums[0]) if nums else 2000
-
-# -----------------------------
-# PARSE TIMELINE
-# Handles:
-# 18 months
-# 1.5 years
-# 1 decade
-# 1.5 decades
-# -----------------------------
-def parse_timeline(text):
-    if not text:
-        return 12
-
-    text = str(text).lower().strip()
     nums = re.findall(r"\d+\.?\d*", text)
-    if not nums:
-        return 12
+    if nums:
+        return float(nums[0])
 
-    value = float(nums[0])
+    return 2000
 
-    if "decade" in text:
-        return value * 120
-    if "year" in text or "yr" in text:
-        return value * 12
-    if "month" in text:
-        return value
 
-    return value
+def extract_timeline_months(text):
+    if not text:
+        return None
+
+    text = text.lower()
+
+    m = re.search(r"(\d+\.?\d*)\s*month", text)
+    if m:
+        return float(m.group(1))
+
+    y = re.search(r"(\d+\.?\d*)\s*year", text)
+    if y:
+        return float(y.group(1)) * 12
+
+    d = re.search(r"(\d+\.?\d*)\s*day", text)
+    if d:
+        return float(d.group(1)) / 30
+
+    return None
+
 
 # -----------------------------
-# PROJECT TYPE DETECTION
+# LOGIC
 # -----------------------------
-def detect_project_type(project, description, ai_project_category=None):
-    if ai_project_category in cost_per_sqft:
-        return ai_project_category
+def detect_project_type(project, description):
+    text = f"{project} {description}".lower()
 
-    text = f"{project or ''} {description or ''}".lower()
-
-    if any(x in text for x in ["warehouse", "factory", "plant", "industrial"]):
+    if "warehouse" in text:
         return "industrial"
-    if any(x in text for x in ["office", "retail", "restaurant", "commercial", "store"]):
+    if "office" in text or "retail" in text:
         return "commercial"
-    if any(x in text for x in ["remodel", "renovation", "addition", "tenant improvement"]):
+    if "remodel" in text:
         return "remodel"
     return "residential"
 
-# -----------------------------
-# COMPLEXITY ENGINE
-# -----------------------------
-def get_project_complexity(project, description):
-    text = f"{project or ''} {description or ''}".lower()
 
-    factor = 1.0
-    flags = []
+def adjustments(materials, city, timeline, description):
+    m = 1.0
+    l = 1.0
+    t = 1.0
+    s = 1.0
 
-    if "traditional japanese" in text or "japanese home" in text:
-        factor += 0.35
-        flags.append("specialized design / craftsmanship")
+    if "steel" in materials.lower():
+        m += 0.15
 
-    if "luxury" in text or "high-end" in text or "estate" in text:
-        factor += 0.50
-        flags.append("luxury finishes")
+    if "san francisco" in city.lower() or "los angeles" in city.lower():
+        l += 0.3
 
-    if "pond" in text or "koi" in text or "landscaping" in text:
-        factor += 0.15
-        flags.append("site / landscaping features")
+    months = extract_timeline_months(timeline)
 
-    if "basement" in text:
-        factor += 0.15
-        flags.append("basement complexity")
+    # ✅ USE timeline properly
+    if months:
+        if months < 6:
+            t += 0.15
+        elif months > 24:
+            t -= 0.05  # long timeline = slightly cheaper
 
-    if "underground" in text or "bunker" in text:
-        factor += 2.0
-        flags.append("underground construction")
+    if "slope" in description.lower():
+        s += 0.2
 
-    if "hospital" in text or "lab" in text or "medical" in text:
-        factor += 1.4
-        flags.append("specialized MEP / compliance")
+    return m, l, t, s
 
-    if "steep slope" in text or "hillside" in text or "slope" in text:
-        factor += 0.30
-        flags.append("difficult site / slope work")
 
-    return factor, flags
+def lead_score(size, budget, cost):
+    score = 5
+    if budget < cost * 0.6:
+        score -= 3
+    elif budget > cost:
+        score += 2
+    return max(1, min(10, score))
 
-# -----------------------------
-# LOCATION MULTIPLIER
-# Market-data-ready approximation layer
-# -----------------------------
-def get_location_multiplier(city):
-    if not city:
-        return 1.0
 
-    text = city.lower()
+def decision(total, budget):
+    if budget == 0:
+        return "NEGOTIATE", "No budget provided"
 
-    # very high cost
-    if any(x in text for x in ["hawaii", "honolulu", "maui", "kauai"]):
-        return 1.40
-    if any(x in text for x in ["san francisco", "new york city", "manhattan"]):
-        return 1.35
+    r = budget / total
 
-    # high cost
-    if any(x in text for x in ["california", "los angeles", "san diego", "san jose", "seattle", "boston", "london", "tokyo"]):
-        return 1.25
+    if r < 0.6:
+        return "REJECT", "Budget too low"
+    elif r < 0.9:
+        return "NEGOTIATE", "Below expected cost"
+    elif r <= 1.3:
+        return "TAKE JOB", "Good alignment"
+    else:
+        return "HIGH VALUE", "High profit margin"
 
-    # slightly below average
-    if any(x in text for x in ["texas", "arizona", "nevada", "florida"]):
-        return 0.95
 
-    # low cost
-    if any(x in text for x in ["india", "vietnam", "mexico", "philippines"]):
-        return 0.75
+def color(d):
+    return {
+        "TAKE JOB": "green",
+        "NEGOTIATE": "yellow",
+        "REJECT": "red",
+        "HIGH VALUE": "blue"
+    }.get(d, "gray")
 
-    return 1.00
-
-# -----------------------------
-# MATERIAL / LABOR / SCHEDULE ADJUSTMENTS
-# -----------------------------
-def get_adjustments(materials, timeline_months, description):
-    text_materials = (materials or "").lower()
-    text_description = (description or "").lower()
-
-    material_factor = 1.0
-    labor_factor = 1.0
-    schedule_factor = 1.0
-    site_factor = 1.0
-
-    if "traditional japanese" in text_materials or "bamboo" in text_materials:
-        material_factor += 0.12
-
-    if "open to other materials" in text_materials or "reduce cost" in text_materials:
-        material_factor -= 0.05
-
-    if timeline_months and timeline_months < 8:
-        schedule_factor += 0.15
-    elif timeline_months and timeline_months < 14:
-        schedule_factor += 0.05
-    elif timeline_months and timeline_months > 60:
-        schedule_factor -= 0.03
-
-    if "pond" in text_description or "yard" in text_description:
-        site_factor += 0.08
-
-    return material_factor, labor_factor, schedule_factor, site_factor
-
-# -----------------------------
-# LEAD SCORE
-# -----------------------------
-def calculate_lead_score(total_cost, budget_val, timeline_months):
-    score = 0
-
-    if budget_val and total_cost:
-        ratio = budget_val / total_cost
-
-        if ratio >= 1.20:
-            score += 5
-        elif ratio >= 1.00:
-            score += 4
-        elif ratio >= 0.80:
-            score += 3
-        elif ratio >= 0.60:
-            score += 2
-        elif ratio >= 0.40:
-            score += 1
-
-    if timeline_months:
-        if timeline_months >= 12:
-            score += 1
-        if timeline_months >= 60:
-            score += 1
-
-    return max(1, min(score, 10))
-
-# -----------------------------
-# DECISION LOGIC
-# -----------------------------
-def get_decision(lead_score):
-    if lead_score >= 8:
-        return "STRONG BID"
-    if lead_score >= 5:
-        return "CONSIDER"
-    return "PASS"
 
 # -----------------------------
 # ROUTES
 # -----------------------------
 @app.route("/")
 def home():
-    return {"status": "running"}
+    return {"status": "API running"}
+
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    data = request.get_json(force=True)
+    try:
+        data = request.json
 
-    project = data.get("project", "")
-    size = data.get("size", "")
-    materials = data.get("materials", "")
-    budget = data.get("budget", "")
-    timeline = data.get("timeline", "")
-    city = data.get("city", "")
-    description = data.get("description", "")
+        size = parse_size(data.get("size"))
+        budget = parse_budget(data.get("budget"))
+        timeline_raw = data.get("timeline", "")
+        months = extract_timeline_months(timeline_raw)
 
-    normalized = normalize_inputs_with_ai(
-        project, size, materials, budget, timeline, city, description
-    )
+        project_type = detect_project_type(data.get("project"), data.get("description"))
 
-    # parser first
-    size_val = parse_size(size)
-    budget_val = parse_budget(budget)
-    timeline_months = parse_timeline(timeline)
+        low, high = cost_per_sqft[project_type]
+        base = ((low + high) / 2) * size
 
-    # AI fallback if parser weak
-    ai_project_category = None
-    if normalized:
-        ai_size = normalized.get("size_sqft")
-        ai_budget = normalized.get("budget_usd")
-        ai_timeline = normalized.get("timeline_months")
-        ai_project_category = normalized.get("project_category")
+        m, l, t, s = adjustments(
+            data.get("materials", ""),
+            data.get("city", ""),
+            timeline_raw,
+            data.get("description", "")
+        )
 
-        if not size_val or size_val < 500:
-            if ai_size:
-                size_val = ai_size
+        total = base * m * l * t * s
 
-        if not budget_val or budget_val < 1000:
-            if ai_budget:
-                budget_val = ai_budget
+        material = total * 0.45
+        labor = total * 0.55
 
-        if not timeline_months or timeline_months < 1:
-            if ai_timeline:
-                timeline_months = ai_timeline
+        rec = total * 1.25
+        agg = total * 1.18
+        minb = total * 1.10
 
-    if not size_val or size_val <= 0:
-        size_val = 2000
-    if budget_val is None or budget_val < 0:
-        budget_val = 0
-    if not timeline_months or timeline_months <= 0:
-        timeline_months = 12
+        score = lead_score(size, budget, total)
+        dec, reason = decision(total, budget)
 
-    project_type = detect_project_type(project, description, ai_project_category)
-    complexity_factor, flags = get_project_complexity(project, description)
-    location_factor = get_location_multiplier(city)
-    material_factor, labor_factor, schedule_factor, site_factor = get_adjustments(
-        materials, timeline_months, description
-    )
+        # ✅ Better fallback analysis
+        analysis = f"""
+Project Type: {project_type}
+Size: {round(size)} sqft
+Estimated Cost: ${round(total):,}
+Timeline: {round(months,1) if months else "N/A"} months
 
-    low, high = cost_per_sqft[project_type]
-    base_mid = (size_val * low + size_val * high) / 2
-
-    total_cost = (
-        base_mid
-        * complexity_factor
-        * location_factor
-        * material_factor
-        * labor_factor
-        * schedule_factor
-        * site_factor
-        * MARKET_FACTORS["materials_index"]
-        * MARKET_FACTORS["labor_index"]
-        * MARKET_FACTORS["general_inflation"]
-    )
-
-    material_cost = total_cost * 0.45
-    labor_cost = total_cost * 0.55
-
-    recommended_bid = total_cost * 1.25
-    aggressive_bid = total_cost * 1.18
-    minimum_bid = total_cost * 1.10
-
-    budget_gap = budget_val - total_cost if budget_val else None
-
-    lead_score = calculate_lead_score(total_cost, budget_val, timeline_months)
-    decision = get_decision(lead_score)
-
-    analysis_text = "AI unavailable."
-
-    if client:
-        try:
-            prompt = f"""
-You are a professional construction estimator.
-
-Use the parsed values below as truth. Do not re-interpret the raw inputs.
-
-Parsed values:
-- Project type: {project_type}
-- Size: {size_val:.0f} sqft
-- Budget: ${budget_val:,.0f}
-- Timeline: {timeline_months:.0f} months
-- Location: {city}
-- Estimated total cost: ${total_cost:,.0f}
-- Recommended bid: ${recommended_bid:,.0f}
-- Aggressive bid: ${aggressive_bid:,.0f}
-- Minimum bid: ${minimum_bid:,.0f}
-- Lead score: {lead_score}/10
-- Decision: {decision}
-
-Raw project description:
-Project: {project}
-Materials: {materials}
-Description: {description}
-
-Write a practical contractor-facing report with these sections:
-1. Budget vs Cost
-2. Timeline Feasibility
-3. Key Risks
-4. Bid Strategy
-
-Keep it grounded in the parsed values above.
+Decision: {dec}
+Reason: {reason}
 """
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2
-            )
-            analysis_text = response.choices[0].message.content
-        except Exception as e:
-            analysis_text = str(e)
 
-    return jsonify({
-        "analysis": analysis_text,
-        "data": {
-            "project_type": project_type,
-            "size_sqft": round(size_val, 2),
-            "budget": round(budget_val, 2) if budget_val else None,
-            "total_cost": round(total_cost, 2),
-            "material_cost": round(material_cost, 2),
-            "labor_cost": round(labor_cost, 2),
-            "recommended_bid": round(recommended_bid, 2),
-            "aggressive_bid": round(aggressive_bid, 2),
-            "minimum_bid": round(minimum_bid, 2),
-            "budget_gap": round(budget_gap, 2) if budget_gap is not None else None,
-            "lead_score": lead_score,
-            "decision": decision,
-            "timeline_months": round(timeline_months, 2),
-            "location_factor": round(location_factor, 2),
-            "complexity_factor": round(complexity_factor, 2),
-            "material_factor": round(material_factor, 2),
-            "schedule_factor": round(schedule_factor, 2),
-            "site_factor": round(site_factor, 2),
-            "flags": flags
-        }
-    })
+        # ✅ STRONGER AI PROMPT
+        if client:
+            try:
+                prompt = f"""
+You are a construction estimator.
+
+STRICT RULES:
+- Use ONLY provided numbers
+- DO NOT change units
+- DO NOT reinterpret timeline
+
+DATA:
+Cost = {round(total)}
+Timeline (months) = {round(months,1) if months else "unknown"}
+Decision = {dec}
+
+Write a short contractor report.
+"""
+                res = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"user","content":prompt}],
+                    temperature=0.2
+                )
+                analysis = res.choices[0].message.content
+            except:
+                pass
+
+        return jsonify({
+            "analysis": analysis,
+            "data": {
+                "total_cost": total,
+                "material_cost": material,
+                "labor_cost": labor,
+                "recommended_bid": rec,
+                "aggressive_bid": agg,
+                "min_bid": minb,
+                "lead_score": score,
+                "decision": dec,
+                "decision_color": color(dec),
+                "budget": budget,
+                "size_sqft": size,
+                "timeline_months": months  # ✅ NEW
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True)
