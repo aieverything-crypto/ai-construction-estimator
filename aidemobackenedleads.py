@@ -237,19 +237,46 @@ Reason: {reason}
         if client:
             try:
                 prompt = f"""
-You are a construction estimator.
+You are a senior construction estimator writing a contractor-facing report.
 
 STRICT RULES:
-- Use ONLY provided numbers
+- Use ONLY the numbers provided
 - DO NOT change units
-- DO NOT reinterpret timeline
+- DO NOT invent values
 
-DATA:
-Cost = {round(total)}
-Timeline (months) = {round(months,1) if months else "unknown"}
-Decision = {dec}
+PROJECT DATA:
+- Project Type: {project_type}
+- Size: {round(size)} sqft
+- Location: {data.get("city")}
+- Budget: ${round(budget):,}
+- Estimated Cost: ${round(total):,}
+- Material Cost: ${round(material):,}
+- Labor Cost: ${round(labor):,}
+- Timeline: {round(months,1) if months else "unknown"} months
+- Recommended Bid: ${round(rec):,}
+- Aggressive Bid: ${round(agg):,}
+- Minimum Bid: ${round(minb):,}
+- Lead Score: {score}/10
+- Decision: {dec}
 
-Write a short contractor report.
+Write a structured contractor report with:
+
+## 1. Cost Realism
+Explain if the estimate makes sense vs market conditions.
+
+## 2. Key Cost Drivers
+List 3–5 real factors affecting cost (labor, materials, location, etc.)
+
+## 3. Contractor Decision
+Explain WHY this is {dec} in practical terms.
+
+## 4. Risk Level
+Identify realistic construction risks.
+
+## 5. Bid Strategy
+Explain recommended vs aggressive vs minimum bids clearly.
+
+Keep it practical, professional, and grounded in real construction logic.
 """
                 res = client.chat.completions.create(
                     model="gpt-4o-mini",
