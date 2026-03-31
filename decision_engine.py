@@ -15,16 +15,17 @@ def lead_score(size, budget, cost):
     score = 5
     ratio = (budget / cost) if budget else 0
 
+    # Budget logic (smarter + realistic)
     if not budget or budget <= 0:
         score -= 3
     elif ratio < 0.5:
         score -= 4
-    elif ratio < 0.8:
+    elif ratio < 0.75:
         score -= 2
-    elif ratio < 0.95:
+    elif ratio < 0.9:
         score -= 1
-    elif ratio <= 1.2:
-        score += 1
+    elif ratio <= 1.1:
+        score += 1   # 👈 THIS IS THE FIX (normal jobs)
     elif ratio <= 2:
         score += 2
     elif ratio <= 5:
@@ -32,6 +33,7 @@ def lead_score(size, budget, cost):
     else:
         score += 4
 
+    # Size adjustment
     if size > 10000:
         score += 1
     elif size < 1000:
