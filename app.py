@@ -3,24 +3,28 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 
-from cost_engine import normalize_scope, apply_scope_cost, estimate_rooms
-from decision_engine import get_decision_color
-
-from parsers import parse_budget, parse_size, extract_timeline_months
+# NEW + EXISTING IMPORTS
 from cost_engine import (
     cost_per_sqft,
     detect_project_type,
     adjustments,
-    build_cost_summary
+    build_cost_summary,
+    normalize_scope,
+    apply_scope_cost,
+    estimate_rooms
 )
+
 from decision_engine import (
     color,
     lead_score,
     decision,
     risk_score,
     deal_score,
-    build_flags
+    build_flags,
+    get_decision_color
 )
+
+from parsers import parse_budget, parse_size, extract_timeline_months
 from ai_engine import build_fallback_analysis, build_ai_analysis
 from plan_engine import analyze_uploaded_plan
 
@@ -38,6 +42,9 @@ def home():
     return {"status": "construction intelligence system running"}
 
 
+# -----------------------------
+# PLAN ANALYSIS
+# -----------------------------
 @app.route("/analyze-plan", methods=["POST"])
 def analyze_plan():
     try:
@@ -56,12 +63,16 @@ def analyze_plan():
         return jsonify({"error": str(e)}), 500
 
 
+# -----------------------------
+# MAIN ANALYSIS
+# -----------------------------
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
         data = request.get_json(force=True) or {}
 
         project = data.get("project", "")
+        scope_input = data.get("scope", "")
         size_raw = data.get("size", "")
         materials = data.get("materials", "")
         budget_raw = data.get("budget", "")
@@ -69,15 +80,36 @@ def analyze():
         city = data.get("city", "")
         description = data.get("description", "")
 
+        # -----------------------------
+        # PARSING
+        # -----------------------------
         size_sqft = parse_size(size_raw)
         budget = parse_budget(budget_raw)
         timeline_months = extract_timeline_months(timeline_raw)
 
+        # -----------------------------
+        # SCOPE
+        # -----------------------------
+        scope = normalize_scope(scope_input)
+
+        # -----------------------------
+        # PROJECT TYPE
+        # -----------------------------
         project_type = detect_project_type(project, description)
 
+        # -----------------------------
+        # BASE COST
+        # -----------------------------
         low, high = cost_per_sqft[project_type]
-        base_cost = ((low + high) / 2) * size_sqft
+        base_cost_per_sqft = (low + high) / 2
 
+        # APPLY SCOPE
+        scoped_cost_per_sqft = apply_scope_cost(base_cost_per_sqft, scope)
+        base_cost = scoped_cost_per_sqft * size_sqft
+
+        # -----------------------------
+        # ADJUSTMENTS
+        # -----------------------------
         material_factor, labor_factor, timeline_factor, site_factor = adjustments(
             materials=materials,
             city=city,
@@ -86,13 +118,36 @@ def analyze():
         )
 
         total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
+
+        # -----------------------------
+        # ROOM BREAKDOWN
+        # -----------------------------
+        rooms = []
+        if isinstance(data.get("rooms"), list):
+            rooms = data.get("rooms")
+
+        location_factor = 1.0
+        room_breakdown, room_total = estimate_rooms(rooms, location_factor)
+
+        # USE BEST COST
+        total_cost = max(total_cost, room_total)
+
+        # -----------------------------
+        # COST SPLITS
+        # -----------------------------
         material_cost = total_cost * 0.45
         labor_cost = total_cost * 0.55
 
+        # -----------------------------
+        # BIDS
+        # -----------------------------
         recommended_bid = total_cost * 1.25
         aggressive_bid = total_cost * 1.18
         min_bid = total_cost * 1.10
 
+        # -----------------------------
+        # FINANCIALS
+        # -----------------------------
         budget_gap = budget - total_cost if budget else 0
         budget_ratio = (budget / total_cost) if (budget and total_cost) else 0
 
@@ -101,8 +156,13 @@ def analyze():
         max_profit = aggressive_bid - total_cost
         margin_percent = (expected_profit / recommended_bid * 100) if recommended_bid else 0
 
+        # -----------------------------
+        # DECISION SYSTEM
+        # -----------------------------
         lead = lead_score(size_sqft, budget, total_cost)
         decision_label, decision_reason = decision(total_cost, budget)
+        decision_color = get_decision_color(decision_label)
+
         risk = risk_score(
             budget=budget,
             cost=total_cost,
@@ -110,12 +170,14 @@ def analyze():
             materials=materials,
             description=description
         )
+
         deal = deal_score(
             budget=budget,
             cost=total_cost,
             risk=risk,
             margin=margin_percent
         )
+
         flags = build_flags(
             budget=budget,
             cost=total_cost,
@@ -125,6 +187,9 @@ def analyze():
             size=size_sqft
         )
 
+        # -----------------------------
+        # SUMMARY
+        # -----------------------------
         summary = build_cost_summary(
             project_type=project_type,
             size_sqft=size_sqft,
@@ -139,6 +204,9 @@ def analyze():
             site_factor=site_factor
         )
 
+        # -----------------------------
+        # ANALYSIS TEXT
+        # -----------------------------
         analysis = build_fallback_analysis(
             project=project,
             city=city,
@@ -186,10 +254,14 @@ def analyze():
             if ai_text:
                 analysis = ai_text
 
+        # -----------------------------
+        # RESPONSE
+        # -----------------------------
         return jsonify({
             "analysis": analysis,
             "data": {
                 "project_type": project_type,
+                "scope": scope,
                 "size_sqft": size_sqft,
                 "budget": budget,
                 "timeline_months": timeline_months,
@@ -204,9 +276,10 @@ def analyze():
                 "lead_score": lead,
                 "decision": decision_label,
                 "decision_reason": decision_reason,
-                "decision_color": color(decision_label),
+                "decision_color": decision_color,
                 "risk_score": risk,
                 "deal_score": deal,
+                "rooms": room_breakdown,
                 "profit": {
                     "min_profit": min_profit,
                     "expected_profit": expected_profit,
