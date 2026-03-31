@@ -131,20 +131,37 @@ def normalize_scope(scope_text):
 # -----------------------------
 # SCOPE COST ADJUSTMENT
 # -----------------------------
-def apply_scope_cost(base_cost_per_sqft, scope):
-    scope_multipliers = {
-        "ground_up": 1.0,
-        "foundation": 0.08,
-        "framing": 0.15,
-        "roofing": 0.07,
-        "electrical": 0.08,
-        "plumbing": 0.10,
-        "hvac": 0.07,
-        "interior": 0.20,
-        "remodel": 0.35
+def apply_scope_cost(base_cost_per_sqft, scope, city=None):
+    """
+    Uses REAL scope-specific pricing instead of % of full build
+    """
+
+    # Base scope pricing (per sqft)
+    scope_costs = {
+        "ground_up": base_cost_per_sqft,
+
+        "framing": (20, 45),
+        "foundation": (15, 40),
+        "roofing": (10, 30),
+
+        "electrical": (10, 25),
+        "plumbing": (12, 30),
+        "hvac": (10, 25),
+
+        "interior": (30, 80),
+        "remodel": (60, 150)
     }
 
-    return base_cost_per_sqft * scope_multipliers.get(scope, 1.0)
+    if scope not in scope_costs:
+        return base_cost_per_sqft
+
+    value = scope_costs[scope]
+
+    # if tuple → take midpoint
+    if isinstance(value, tuple):
+        return (value[0] + value[1]) / 2
+
+    return value
 
 
 # -----------------------------
