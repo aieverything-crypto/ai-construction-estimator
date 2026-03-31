@@ -117,15 +117,29 @@ def analyze():
         if scope != "ground_up":
             project_type = f"{scope}_project"
 
-        # -----------------------------
-        # COMPONENT COSTING (NEW)
-        # -----------------------------
-        component_cost, quantities = calculate_component_cost(
-            scope,
-            size_sqft,
-            city,
-            rooms=data.get("rooms")
-        )
+# -----------------------------
+# COMPONENT COSTING (SAFE FIX)
+# -----------------------------
+try:
+    result = calculate_component_cost(
+        scope,
+        size_sqft,
+        city,
+        rooms=data.get("rooms")
+    )
+
+    if isinstance(result, tuple) and len(result) == 2:
+        component_cost, quantities = result
+    else:
+        component_cost = 0
+        quantities = {}
+
+    print("🔥 COMPONENT COST:", component_cost)
+
+except Exception as e:
+    print("❌ COMPONENT COST ERROR:", e)
+    component_cost = 0
+    quantities = {}
 
         if scope == "ground_up":
             low, high = cost_per_sqft.get(project_type, (200, 400))
