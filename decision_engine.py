@@ -3,7 +3,8 @@ def color(decision_label):
         "TAKE JOB": "green",
         "NEGOTIATE": "yellow",
         "REJECT": "red",
-        "HIGH VALUE": "blue"
+        "HIGH VALUE": "blue",
+        "HIGH RISK": "red"
     }.get(decision_label, "gray")
 
 
@@ -14,12 +15,14 @@ def lead_score(size, budget, cost):
     score = 5
     ratio = (budget / cost) if budget else 0
 
-    if budget == 0:
+    if not budget or budget <= 0:
         score -= 3
     elif ratio < 0.5:
         score -= 4
     elif ratio < 0.8:
         score -= 2
+    elif ratio < 0.95:
+        score -= 1
     elif ratio <= 1.2:
         score += 1
     elif ratio <= 2:
@@ -38,19 +41,24 @@ def lead_score(size, budget, cost):
 
 
 def decision(total, budget):
-    if budget == 0:
-        return "NEGOTIATE", "No budget provided"
+    if not budget or budget <= 0:
+        return "REJECT", "No valid budget"
 
-    ratio = (budget / total) if total else 0
+    if not total or total <= 0:
+        return "REJECT", "Invalid estimated cost"
 
-    if ratio < 0.6:
-        return "REJECT", "Budget is far below estimated cost"
-    elif ratio < 0.9:
-        return "NEGOTIATE", "Budget is below estimated cost"
-    elif ratio <= 1.3:
-        return "TAKE JOB", "Budget is reasonably aligned with cost"
-    else:
+    ratio = budget / total
+
+    if ratio >= 1.3:
         return "HIGH VALUE", "Budget supports strong margins"
+    elif ratio >= 1.0:
+        return "TAKE JOB", "Budget meets or exceeds estimated cost"
+    elif ratio >= 0.9:
+        return "NEGOTIATE", "Slight budget gap"
+    elif ratio >= 0.75:
+        return "HIGH RISK", "Significant budget gap"
+    else:
+        return "REJECT", "Budget is far below estimated cost"
 
 
 def risk_score(budget, cost, timeline_months, materials, description):
@@ -138,10 +146,11 @@ def build_flags(budget, cost, timeline_months, materials, description, size):
         flags.append("Parsed size is unusually small; check input formatting.")
 
     return flags
-    
+
+
 def get_decision_color(decision):
-    if decision == "STRONG BID":
+    if decision in ["TAKE JOB", "HIGH VALUE", "STRONG BID"]:
         return "green"
-    if decision == "CONSIDER":
+    if decision in ["NEGOTIATE", "CONSIDER"]:
         return "yellow"
     return "red"
