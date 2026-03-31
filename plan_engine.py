@@ -26,17 +26,35 @@ def extract_pdf_text(file_bytes):
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         text_parts = []
 
-        # 🔥 only first 12 pages (huge performance fix)
         for i, page in enumerate(doc):
-            if i > 12:
+            if i > 15:
                 break
-            text_parts.append(page.get_text())
+
+            text = page.get_text()
+
+            # prioritize useful pages
+            if any(keyword in text.lower() for keyword in [
+                "floor plan",
+                "square feet",
+                "sf",
+                "area",
+                "elevation",
+                "plan",
+                "section"
+            ]):
+                text_parts.append(text)
+
+        # fallback if nothing matched
+        if not text_parts:
+            for i, page in enumerate(doc):
+                if i > 10:
+                    break
+                text_parts.append(page.get_text())
 
         return "\n".join(text_parts)
 
-    except:
+    except Exception:
         return None
-
 
 # =========================
 # BASIC EXTRACTION
@@ -58,13 +76,51 @@ def detect_materials(text):
     return None
 
 
+
 def pre_extract_plan_data(text):
-    sqft = find_number([r"([\d,]+)\s*sf"], text)
+    if not text:
+        return {}
+
+    t = text.lower()
+
+    sqft = None
+
+    patterns = [
+        r"total.*?([\d,]+)\s*sf",
+        r"living.*?([\d,]+)\s*sf",
+        r"floor.*?([\d,]+)\s*sf",
+        r"([\d,]+)\s*sf"
+    ]
+
+    for p in patterns:
+        matches = re.findall(p, t)
+        for m in matches:
+            try:
+                val = float(m.replace(",", ""))
+                if val > 500:
+                    sqft = val
+                    break
+            except:
+                continue
+        if sqft:
+            break
+
+    # detect structure
+    materials = None
+    if "type v" in t or "wood frame" in t:
+        materials = "wood framing"
+    elif "concrete" in t:
+        materials = "concrete"
+
+    # detect project type
+    project_type = "residential"
+    if "garage" in t:
+        project_type = "residential_with_garage"
 
     return {
-        "project_type": "residential",
+        "project_type": project_type,
         "estimated_size_sqft": sqft,
-        "materials_hint": detect_materials(text),
+        "materials_hint": materials,
         "location_data": {"city": None}
     }
 
