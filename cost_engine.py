@@ -241,9 +241,15 @@ def calculate_component_cost(scope, size_sqft, city, rooms=None):
     total = 0
 
     if scope == "framing":
-        total += quantities["wall_area"] * costs["wall_framing_per_sqft"]
-        total += quantities["roof_area"] * costs["roof_framing_per_sqft"]
-        total += size_sqft * costs["labor_per_sqft"]
+    labor = size_sqft * 18
+    materials = size_sqft * 12
+
+    total = labor + materials
+
+    return total, {
+        "labor_cost": labor,
+        "material_cost": materials
+    }
 
     elif scope == "electrical":
         total += quantities["outlets"] * costs["outlet_cost"]
