@@ -89,8 +89,6 @@ def analyze():
         scope = normalize_scope(scope_input)
         scope = str(scope).lower().strip()
 
-        print("🔥 FINAL SCOPE:", scope)
-
         if not scope or scope == "ground_up":
             if scope_input:
                 text = scope_input.lower()
@@ -111,23 +109,39 @@ def analyze():
                 elif "remodel" in text:
                     scope = "remodel"
 
+        print("🔥 FINAL SCOPE:", scope)
+
         # -----------------------------
         # PROJECT TYPE
         # -----------------------------
         project_type = detect_project_type(project, description)
-
         if scope != "ground_up":
             project_type = f"{scope}_project"
 
         # -----------------------------
+        # NORMALIZE ROOMS INPUT
+        # -----------------------------
+        raw_rooms = data.get("rooms")
+        rooms_for_component = {}
+        rooms_for_breakdown = []
+
+        if isinstance(raw_rooms, dict):
+            rooms_for_component = raw_rooms
+        elif isinstance(raw_rooms, list):
+            rooms_for_breakdown = raw_rooms
+
+        # -----------------------------
         # COMPONENT COSTING (SAFE)
         # -----------------------------
+        component_cost = 0
+        quantities = {}
+
         try:
             result = calculate_component_cost(
                 scope,
                 size_sqft,
                 city,
-                rooms=data.get("rooms")
+                rooms=rooms_for_component
             )
 
             if isinstance(result, tuple) and len(result) == 2:
@@ -137,6 +151,7 @@ def analyze():
                 quantities = {}
 
             print("🔥 COMPONENT COST:", component_cost)
+            print("🔥 QUANTITIES:", quantities)
 
         except Exception as e:
             print("❌ COMPONENT COST ERROR:", e)
@@ -162,6 +177,8 @@ def analyze():
             low = base_cost * 0.8
             high = base_cost * 1.2
 
+        print("🔥 BASE COST:", base_cost)
+
         # -----------------------------
         # ADJUSTMENTS
         # -----------------------------
@@ -180,9 +197,12 @@ def analyze():
         # -----------------------------
         # ROOM COST OVERRIDE
         # -----------------------------
-        rooms = data.get("rooms") if isinstance(data.get("rooms"), list) else []
-        room_breakdown, room_total = estimate_rooms(rooms, 1.0)
-        total_cost = max(total_cost, room_total)
+        room_breakdown = []
+        room_total = 0
+
+        if rooms_for_breakdown:
+            room_breakdown, room_total = estimate_rooms(rooms_for_breakdown, 1.0)
+            total_cost = max(total_cost, room_total)
 
         # -----------------------------
         # COST SPLIT
@@ -250,7 +270,38 @@ def analyze():
         )
 
         # -----------------------------
-        # ANALYSIS
+        # SUGGESTIONS
+        # -----------------------------
+        suggestions = []
+
+        if margin_percent < 15:
+            suggestions.append("Increase bid or reduce labor costs")
+
+        if budget_ratio < 1:
+            suggestions.append("Budget below cost — negotiation likely")
+
+        if timeline_months and estimated_days and (timeline_months * 30 < estimated_days):
+            suggestions.append("Timeline too aggressive — risk of delays")
+
+        # -----------------------------
+        # SUMMARY (IMPORTANT FOR AI ENGINE)
+        # -----------------------------
+        summary = build_cost_summary(
+            project_type=project_type,
+            size_sqft=size_sqft,
+            city=city,
+            low=low,
+            high=high,
+            base_cost=base_cost,
+            total_cost=total_cost,
+            material_factor=material_factor,
+            labor_factor=labor_factor,
+            timeline_factor=timeline_factor,
+            site_factor=site_factor
+        )
+
+        # -----------------------------
+        # FALLBACK ANALYSIS
         # -----------------------------
         analysis = build_fallback_analysis(
             project=project,
@@ -268,45 +319,77 @@ def analyze():
             flags=flags
         )
 
+        # -----------------------------
+        # AI ANALYSIS (SAFE)
+        # -----------------------------
         if client:
-            ai_text = build_ai_analysis(
-                client=client,
-                project=project,
-                project_type=project_type,
-                size_sqft=size_sqft,
-                city=city,
-                materials=materials,
-                budget=budget,
-                timeline_months=timeline_months,
-                description=description,
-                total_cost=total_cost,
-                material_cost=material_cost,
-                labor_cost=labor_cost,
-                recommended_bid=recommended_bid,
-                aggressive_bid=aggressive_bid,
-                min_bid=min_bid,
-                budget_gap=budget_gap,
-                budget_ratio=budget_ratio,
-                lead_score_value=lead,
-                decision_label=decision_label,
-                risk=risk,
-                deal=deal,
-                expected_profit=expected_profit,
-                margin_percent=margin_percent,
-                flags=flags,
-                summary={}
-            )
-            if ai_text:
-                analysis = ai_text
+            try:
+                ai_text = build_ai_analysis(
+                    client=client,
+                    project=project,
+                    project_type=project_type,
+                    size_sqft=size_sqft,
+                    city=city,
+                    materials=materials,
+                    budget=budget,
+                    timeline_months=timeline_months,
+                    description=description,
+                    total_cost=total_cost,
+                    material_cost=material_cost,
+                    labor_cost=labor_cost,
+                    recommended_bid=recommended_bid,
+                    aggressive_bid=aggressive_bid,
+                    min_bid=min_bid,
+                    budget_gap=budget_gap,
+                    budget_ratio=budget_ratio,
+                    lead_score_value=lead,
+                    decision_label=decision_label,
+                    risk=risk,
+                    deal=deal,
+                    expected_profit=expected_profit,
+                    margin_percent=margin_percent,
+                    flags=flags,
+                    summary=summary
+                )
+                if ai_text:
+                    analysis = ai_text
+            except Exception as e:
+                print("❌ AI ANALYSIS ERROR:", e)
 
         return jsonify({
             "analysis": analysis,
             "data": {
+                "project_type": project_type,
+                "scope": scope,
+                "size_sqft": size_sqft,
+                "budget": budget,
+                "timeline_months": timeline_months,
                 "total_cost": total_cost,
+                "material_cost": material_cost,
+                "labor_cost": labor_cost,
                 "recommended_bid": recommended_bid,
+                "aggressive_bid": aggressive_bid,
+                "min_bid": min_bid,
+                "budget_gap": budget_gap,
+                "budget_ratio": budget_ratio,
                 "lead_score": lead,
+                "lead_class": lead_class,
                 "decision": decision_label,
-                "quantities": quantities
+                "decision_reason": decision_reason,
+                "decision_color": decision_color,
+                "risk_score": risk,
+                "deal_score": deal,
+                "rooms": room_breakdown,
+                "quantities": quantities,
+                "estimated_days": estimated_days,
+                "suggestions": suggestions,
+                "profit": {
+                    "min_profit": min_profit,
+                    "expected_profit": expected_profit,
+                    "max_profit": max_profit,
+                    "margin_percent": margin_percent
+                },
+                "flags": flags
             }
         })
 
