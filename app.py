@@ -104,7 +104,7 @@ def analyze():
         base_cost_per_sqft = (low + high) / 2
 
         # APPLY SCOPE
-        scoped_cost_per_sqft = apply_scope_cost(base_cost_per_sqft, scope)
+        scoped_cost_per_sqft = apply_scope_cost(base_cost_per_sqft, scope, city)
         base_cost = scoped_cost_per_sqft * size_sqft
 
         # -----------------------------
@@ -117,8 +117,11 @@ def analyze():
             description=description
         )
 
-        total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
-
+        if scope == "ground_up":
+            total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
+        else:
+            # MUCH lighter adjustments for scoped work
+            total_cost = base_cost * (1 + (labor_factor - 1) * 0.5)
         # -----------------------------
         # ROOM BREAKDOWN
         # -----------------------------
