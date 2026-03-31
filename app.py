@@ -3,6 +3,9 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 
+from cost_engine import normalize_scope, apply_scope_cost, estimate_rooms
+from decision_engine import get_decision_color
+
 from parsers import parse_budget, parse_size, extract_timeline_months
 from cost_engine import (
     cost_per_sqft,
