@@ -100,12 +100,14 @@ def analyze():
         # -----------------------------
         # BASE COST
         # -----------------------------
-        low, high = cost_per_sqft[project_type]
-        base_cost_per_sqft = (low + high) / 2
+        if scope == "ground_up":
+            low, high = cost_per_sqft[project_type]
+            base_cost_per_sqft = (low + high) / 2
+        else:
+            # IGNORE project_type pricing for scoped work
+            base_cost_per_sqft = apply_scope_cost(None, scope, city)
 
-        # APPLY SCOPE
-        scoped_cost_per_sqft = apply_scope_cost(base_cost_per_sqft, scope, city)
-        base_cost = scoped_cost_per_sqft * size_sqft
+        base_cost = base_cost_per_sqft * size_sqft
 
         # -----------------------------
         # ADJUSTMENTS
