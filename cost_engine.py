@@ -235,43 +235,46 @@ def estimate_quantities(scope, size_sqft, rooms=None):
 
 
 def calculate_component_cost(scope, size_sqft, city, rooms=None):
-    quantities = estimate_quantities(scope, size_sqft, rooms)
-    costs = COMPONENT_COSTS.get(scope, {})
+    """
+    Component-based cost calculation (clean + safe)
+    """
 
-    total = 0
-
+    # 🔥 FRAMING (FIXED REALISTIC MODEL)
     if scope == "framing":
-    labor = size_sqft * 18
-    materials = size_sqft * 12
+        labor = size_sqft * 18
+        materials = size_sqft * 12
 
-    total = labor + materials
+        total = labor + materials
 
-    return total, {
-        "labor_cost": labor,
-        "material_cost": materials
-    }
+        print("🔥 USING NEW FRAMING LOGIC:", total)
 
+        return total, {
+            "labor_cost": labor,
+            "material_cost": materials
+        }
+
+    # 🔧 ELECTRICAL (basic placeholder)
     elif scope == "electrical":
-        total += quantities["outlets"] * costs["outlet_cost"]
-        total += quantities["panels"] * costs["panel_cost"]
-        total += size_sqft * costs["wiring_per_sqft"]
+        outlets = int(size_sqft / 150)
+        total = outlets * 150 + size_sqft * 4
 
+        return total, {
+            "outlets": outlets
+        }
+
+    # 🔧 PLUMBING (basic placeholder)
     elif scope == "plumbing":
-        total += quantities["fixtures"] * costs["fixture_cost"]
-        total += size_sqft * costs["pipe_per_sqft"]
+        bathrooms = (rooms or {}).get("bathrooms", 1)
+        fixtures = bathrooms * 5
 
-    return total, quantities
+        total = fixtures * 800 + size_sqft * 5
 
+        return total, {
+            "fixtures": fixtures
+        }
 
-# =========================
-# CREW PRODUCTION SYSTEM
-# =========================
-
-CREW_PRODUCTION = {
-    "framing": {"sqft_per_day": 800},
-    "electrical": {"sqft_per_day": 600},
-    "plumbing": {"sqft_per_day": 500}
-}
+    # ❌ DEFAULT (IMPORTANT)
+    return 0, {}
 
 
 def estimate_duration(scope, size_sqft):
