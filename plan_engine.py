@@ -566,17 +566,22 @@ def analyze_uploaded_plan(client, file_obj):
                 raw, ai_parsed = analyze_pdf_text_with_ai(client, extracted_text, pre_data)
                 merged = merge_plan_data(pre_data, ai_parsed)
 
-                return {
-                    "mode": "pdf_text_hybrid",
-                    "raw": raw,
-                    "parsed": merged,
-                    "pre_extracted": pre_data
+               enriched = enrich_for_estimator(merged, extracted_text)
+
+               return {
+                   "mode": "pdf_text_hybrid",
+                   "raw": raw,
+                   "parsed": enriched,
+                   "pre_extracted": pre_data
                 }
             except Exception as e:
+            
+                enriched = enrich_for_estimator(pre_data, extracted_text)
+
                 return {
                     "mode": "pdf_text_preextract_only",
                     "raw": str(e),
-                    "parsed": pre_data,
+                    "parsed": enriched,
                     "pre_extracted": pre_data
                 }
 
@@ -585,10 +590,13 @@ def analyze_uploaded_plan(client, file_obj):
     # =========================
     try:
         raw, parsed = analyze_image_with_ai(client, file_bytes)
+        
+        enriched = enrich_for_estimator(parsed, "")
+
         return {
             "mode": "image",
             "raw": raw,
-            "parsed": parsed,
+            "parsed": enriched,
             "pre_extracted": {}
         }
     except Exception as e:
@@ -598,3 +606,56 @@ def analyze_uploaded_plan(client, file_obj):
             "parsed": None,
             "pre_extracted": {}
         }
+# =========================
+# ESTIMATOR ENRICHMENT LAYER (SAFE ADD-ON)
+# =========================
+
+def extract_room_counts(text):
+    t = (text or "").lower()
+
+    bathrooms = 0
+    kitchens = 0
+
+    # Detect bathrooms
+    matches = re.findall(r"(\d+)\s*bath", t)
+    if matches:
+        try:
+            bathrooms = max(int(x) for x in matches)
+        except:
+            bathrooms = 1
+    elif "bathroom" in t:
+        bathrooms = 1
+
+    # Detect kitchens
+    if "kitchen" in t:
+        kitchens = 1
+
+    return {
+        "bathrooms": bathrooms,
+        "kitchens": kitchens
+    }
+
+
+def enrich_for_estimator(plan_data, raw_text):
+    """
+    Adds estimator-friendly fields WITHOUT breaking existing structure
+    """
+    if not isinstance(plan_data, dict):
+        return plan_data
+
+    enriched = dict(plan_data)
+
+    rooms = extract_room_counts(raw_text)
+
+    enriched["rooms"] = rooms
+
+    enriched["estimator_inputs"] = {
+        "bathrooms": rooms.get("bathrooms", 1),
+        "kitchens": rooms.get("kitchens", 1),
+        "size_sqft": plan_data.get("estimated_size_sqft"),
+        "project_type": plan_data.get("project_type"),
+        "materials": plan_data.get("materials_hint"),
+        "city": (plan_data.get("location_data") or {}).get("city")
+    }
+
+    return enriched
