@@ -138,3 +138,10 @@ def build_flags(budget, cost, timeline_months, materials, description, size):
         flags.append("Parsed size is unusually small; check input formatting.")
 
     return flags
+    
+def get_decision_color(decision):
+    if decision == "STRONG BID":
+        return "green"
+    if decision == "CONSIDER":
+        return "yellow"
+    return "red"
