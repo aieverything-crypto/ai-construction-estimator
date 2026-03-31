@@ -89,3 +89,98 @@ def build_cost_summary(
         "timeline_factor": timeline_factor,
         "site_factor": site_factor
     }
+# -----------------------------
+# SCOPE NORMALIZATION
+# -----------------------------
+def normalize_scope(scope_text):
+    if not scope_text:
+        return "ground_up"
+
+    text = scope_text.lower()
+
+    if any(x in text for x in ["ground", "full", "new build", "entire"]):
+        return "ground_up"
+
+    if "frame" in text:
+        return "framing"
+
+    if any(x in text for x in ["foundation", "footing", "slab"]):
+        return "foundation"
+
+    if any(x in text for x in ["retrofit", "remodel", "renovation"]):
+        return "remodel"
+
+    if any(x in text for x in ["roof", "shingle"]):
+        return "roofing"
+
+    if any(x in text for x in ["electrical", "wiring"]):
+        return "electrical"
+
+    if any(x in text for x in ["plumbing", "pipes"]):
+        return "plumbing"
+
+    if "hvac" in text:
+        return "hvac"
+
+    if any(x in text for x in ["interior", "finish", "drywall"]):
+        return "interior"
+
+    return "ground_up"
+
+
+# -----------------------------
+# SCOPE COST ADJUSTMENT
+# -----------------------------
+def apply_scope_cost(base_cost_per_sqft, scope):
+    scope_multipliers = {
+        "ground_up": 1.0,
+        "foundation": 0.08,
+        "framing": 0.15,
+        "roofing": 0.07,
+        "electrical": 0.08,
+        "plumbing": 0.10,
+        "hvac": 0.07,
+        "interior": 0.20,
+        "remodel": 0.35
+    }
+
+    return base_cost_per_sqft * scope_multipliers.get(scope, 1.0)
+
+
+# -----------------------------
+# ROOM COST ENGINE
+# -----------------------------
+def estimate_rooms(rooms, location_factor=1.0):
+    room_costs = {
+        "kitchen": (150, 300),
+        "bathroom": (200, 400),
+        "bedroom": (80, 150),
+        "living_room": (100, 200)
+    }
+
+    results = []
+    total = 0
+
+    for r in rooms:
+        r_type = r.get("type")
+        count = r.get("count", 1)
+        size = r.get("avg_size", 150)
+
+        if r_type not in room_costs:
+            continue
+
+        low, high = room_costs[r_type]
+        cost_per_sqft = (low + high) / 2
+
+        room_total = cost_per_sqft * size * count * location_factor
+
+        results.append({
+            "type": r_type,
+            "count": count,
+            "size": size,
+            "cost": round(room_total)
+        })
+
+        total += room_total
+
+    return results, total
