@@ -3,7 +3,6 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 
-# NEW + EXISTING IMPORTS
 from cost_engine import (
     cost_per_sqft,
     detect_project_type,
@@ -42,9 +41,6 @@ def home():
     return {"status": "construction intelligence system running"}
 
 
-# -----------------------------
-# PLAN ANALYSIS
-# -----------------------------
 @app.route("/analyze-plan", methods=["POST"])
 def analyze_plan():
     try:
@@ -63,9 +59,6 @@ def analyze_plan():
         return jsonify({"error": str(e)}), 500
 
 
-# -----------------------------
-# MAIN ANALYSIS
-# -----------------------------
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
@@ -80,38 +73,29 @@ def analyze():
         city = data.get("city", "")
         description = data.get("description", "")
 
-        # -----------------------------
-        # PARSING
-        # -----------------------------
         size_sqft = parse_size(size_raw)
         budget = parse_budget(budget_raw)
         timeline_months = extract_timeline_months(timeline_raw)
 
-        # -----------------------------
-        # SCOPE
-        # -----------------------------
         scope = normalize_scope(scope_input)
 
-        # -----------------------------
-        # PROJECT TYPE
-        # -----------------------------
         project_type = detect_project_type(project, description)
 
-        # -----------------------------
-        # BASE COST
-        # -----------------------------
+        # FIX: override project type for scoped work
+        if scope != "ground_up":
+            project_type = f"{scope}_project"
+
+        # FIXED BASE COST
         if scope == "ground_up":
             low, high = cost_per_sqft[project_type]
             base_cost_per_sqft = (low + high) / 2
         else:
-            # IGNORE project_type pricing for scoped work
             base_cost_per_sqft = apply_scope_cost(None, scope, city)
+            low = base_cost_per_sqft * 0.8
+            high = base_cost_per_sqft * 1.2
 
         base_cost = base_cost_per_sqft * size_sqft
 
-        # -----------------------------
-        # ADJUSTMENTS
-        # -----------------------------
         material_factor, labor_factor, timeline_factor, site_factor = adjustments(
             materials=materials,
             city=city,
@@ -122,37 +106,23 @@ def analyze():
         if scope == "ground_up":
             total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
         else:
-            # MUCH lighter adjustments for scoped work
             total_cost = base_cost * (1 + (labor_factor - 1) * 0.5)
-        # -----------------------------
-        # ROOM BREAKDOWN
-        # -----------------------------
+
         rooms = []
         if isinstance(data.get("rooms"), list):
             rooms = data.get("rooms")
 
-        location_factor = 1.0
-        room_breakdown, room_total = estimate_rooms(rooms, location_factor)
+        room_breakdown, room_total = estimate_rooms(rooms, 1.0)
 
-        # USE BEST COST
         total_cost = max(total_cost, room_total)
 
-        # -----------------------------
-        # COST SPLITS
-        # -----------------------------
         material_cost = total_cost * 0.45
         labor_cost = total_cost * 0.55
 
-        # -----------------------------
-        # BIDS
-        # -----------------------------
         recommended_bid = total_cost * 1.25
         aggressive_bid = total_cost * 1.18
         min_bid = total_cost * 1.10
 
-        # -----------------------------
-        # FINANCIALS
-        # -----------------------------
         budget_gap = budget - total_cost if budget else 0
         budget_ratio = (budget / total_cost) if (budget and total_cost) else 0
 
@@ -161,9 +131,6 @@ def analyze():
         max_profit = aggressive_bid - total_cost
         margin_percent = (expected_profit / recommended_bid * 100) if recommended_bid else 0
 
-        # -----------------------------
-        # DECISION SYSTEM
-        # -----------------------------
         lead = lead_score(size_sqft, budget, total_cost)
         decision_label, decision_reason = decision(total_cost, budget)
         decision_color = get_decision_color(decision_label)
@@ -192,9 +159,6 @@ def analyze():
             size=size_sqft
         )
 
-        # -----------------------------
-        # SUMMARY
-        # -----------------------------
         summary = build_cost_summary(
             project_type=project_type,
             size_sqft=size_sqft,
@@ -209,9 +173,6 @@ def analyze():
             site_factor=site_factor
         )
 
-        # -----------------------------
-        # ANALYSIS TEXT
-        # -----------------------------
         analysis = build_fallback_analysis(
             project=project,
             city=city,
@@ -259,9 +220,6 @@ def analyze():
             if ai_text:
                 analysis = ai_text
 
-        # -----------------------------
-        # RESPONSE
-        # -----------------------------
         return jsonify({
             "analysis": analysis,
             "data": {
