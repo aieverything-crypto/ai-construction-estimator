@@ -10,7 +10,9 @@ from cost_engine import (
     build_cost_summary,
     normalize_scope,
     apply_scope_cost,
-    estimate_rooms
+    estimate_rooms,
+    calculate_component_cost,
+    estimate_duration
 )
 
 from decision_engine import (
@@ -20,7 +22,8 @@ from decision_engine import (
     risk_score,
     deal_score,
     build_flags,
-    get_decision_color
+    get_decision_color,
+    classify_lead
 )
 
 from parsers import parse_budget, parse_size, extract_timeline_months
@@ -81,18 +84,14 @@ def analyze():
         timeline_months = extract_timeline_months(timeline_raw)
 
         # -----------------------------
-        # SCOPE (CLEAN + SAFE)
+        # SCOPE NORMALIZATION
         # -----------------------------
-        print("RAW SCOPE INPUT:", scope_input)
-
         scope = normalize_scope(scope_input)
         scope = str(scope).lower().strip()
 
-        # fallback protection (only triggers if parsing fails)
         if not scope or scope == "ground_up":
-            if scope_input and scope_input.strip():
+            if scope_input:
                 text = scope_input.lower()
-
                 if "fram" in text:
                     scope = "framing"
                 elif "elect" in text:
@@ -110,8 +109,6 @@ def analyze():
                 elif "remodel" in text:
                     scope = "remodel"
 
-        print("FINAL SCOPE:", scope)
-
         # -----------------------------
         # PROJECT TYPE
         # -----------------------------
@@ -121,19 +118,30 @@ def analyze():
             project_type = f"{scope}_project"
 
         # -----------------------------
-        # BASE COST (CORRECT LOGIC)
+        # COMPONENT COSTING (NEW)
         # -----------------------------
+        component_cost, quantities = calculate_component_cost(
+            scope,
+            size_sqft,
+            city,
+            rooms=data.get("rooms")
+        )
+
         if scope == "ground_up":
             low, high = cost_per_sqft.get(project_type, (200, 400))
             base_cost_per_sqft = (low + high) / 2
+            base_cost = base_cost_per_sqft * size_sqft
+
+        elif component_cost > 0:
+            base_cost = component_cost
+            low = base_cost * 0.85
+            high = base_cost * 1.15
+
         else:
             base_cost_per_sqft = apply_scope_cost(None, scope, city)
-            low = base_cost_per_sqft * 0.8
-            high = base_cost_per_sqft * 1.2
-
-        print("COST/SQFT:", base_cost_per_sqft)
-
-        base_cost = base_cost_per_sqft * size_sqft
+            base_cost = base_cost_per_sqft * size_sqft
+            low = base_cost * 0.8
+            high = base_cost * 1.2
 
         # -----------------------------
         # ADJUSTMENTS
@@ -151,17 +159,14 @@ def analyze():
             total_cost = base_cost * (1 + (labor_factor - 1) * 0.5)
 
         # -----------------------------
-        # ROOM BREAKDOWN
+        # ROOM COST OVERRIDE
         # -----------------------------
-        rooms = []
-        if isinstance(data.get("rooms"), list):
-            rooms = data.get("rooms")
-
+        rooms = data.get("rooms") if isinstance(data.get("rooms"), list) else []
         room_breakdown, room_total = estimate_rooms(rooms, 1.0)
         total_cost = max(total_cost, room_total)
 
         # -----------------------------
-        # COST SPLITS
+        # COST SPLIT
         # -----------------------------
         material_cost = total_cost * 0.45
         labor_cost = total_cost * 0.55
@@ -185,11 +190,10 @@ def analyze():
         margin_percent = (expected_profit / recommended_bid * 100) if recommended_bid else 0
 
         # -----------------------------
-        # DECISION ENGINE
+        # CREW + LEAD CLASS (NEW)
         # -----------------------------
+        estimated_days = estimate_duration(scope, size_sqft)
         lead = lead_score(size_sqft, budget, total_cost)
-        decision_label, decision_reason = decision(total_cost, budget)
-        decision_color = get_decision_color(decision_label)
 
         risk = risk_score(
             budget=budget,
@@ -206,6 +210,17 @@ def analyze():
             margin=margin_percent
         )
 
+        lead_class = classify_lead(budget_ratio, risk, margin_percent)
+
+        # -----------------------------
+        # DECISION
+        # -----------------------------
+        decision_label, decision_reason = decision(total_cost, budget)
+        decision_color = get_decision_color(decision_label)
+
+        # -----------------------------
+        # FLAGS
+        # -----------------------------
         flags = build_flags(
             budget=budget,
             cost=total_cost,
@@ -214,6 +229,21 @@ def analyze():
             description=description,
             size=size_sqft
         )
+
+        # -----------------------------
+        # SUGGESTIONS (NEW)
+        # -----------------------------
+        suggestions = []
+
+        if margin_percent < 15:
+            suggestions.append("Increase bid or reduce labor costs")
+
+        if budget_ratio < 1:
+            suggestions.append("Budget below cost — negotiation likely")
+
+        if timeline_months and estimated_days:
+            if timeline_months * 30 < estimated_days:
+                suggestions.append("Timeline too aggressive — risk of delays")
 
         # -----------------------------
         # SUMMARY
@@ -299,12 +329,16 @@ def analyze():
                 "budget_gap": budget_gap,
                 "budget_ratio": budget_ratio,
                 "lead_score": lead,
+                "lead_class": lead_class,
                 "decision": decision_label,
                 "decision_reason": decision_reason,
                 "decision_color": decision_color,
                 "risk_score": risk,
                 "deal_score": deal,
                 "rooms": room_breakdown,
+                "quantities": quantities,
+                "estimated_days": estimated_days,
+                "suggestions": suggestions,
                 "profit": {
                     "min_profit": min_profit,
                     "expected_profit": expected_profit,
