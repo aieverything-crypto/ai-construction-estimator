@@ -81,21 +81,36 @@ def analyze():
         timeline_months = extract_timeline_months(timeline_raw)
 
         # -----------------------------
-        # SCOPE DEBUG + FORCE FIX
+        # SCOPE (CLEAN + SAFE)
         # -----------------------------
-        print("RAW SCOPE INPUT FROM FRONTEND:", scope_input)
+        print("RAW SCOPE INPUT:", scope_input)
 
         scope = normalize_scope(scope_input)
         scope = str(scope).lower().strip()
 
-        print("FINAL NORMALIZED SCOPE:", scope)
+        # fallback protection (only triggers if parsing fails)
+        if not scope or scope == "ground_up":
+            if scope_input and scope_input.strip():
+                text = scope_input.lower()
 
-        # 🔥 FORCE FIX (GUARANTEED WORK)
-        if scope_input and "fram" in scope_input.lower():
-            print("FORCING SCOPE TO FRAMING")
-            scope = "framing"
+                if "fram" in text:
+                    scope = "framing"
+                elif "elect" in text:
+                    scope = "electrical"
+                elif "plumb" in text:
+                    scope = "plumbing"
+                elif "hvac" in text:
+                    scope = "hvac"
+                elif "roof" in text:
+                    scope = "roofing"
+                elif "found" in text:
+                    scope = "foundation"
+                elif "interior" in text:
+                    scope = "interior"
+                elif "remodel" in text:
+                    scope = "remodel"
 
-        print("FINAL SCOPE USED FOR COST:", scope)
+        print("FINAL SCOPE:", scope)
 
         # -----------------------------
         # PROJECT TYPE
@@ -106,23 +121,17 @@ def analyze():
             project_type = f"{scope}_project"
 
         # -----------------------------
-        # BASE COST (FIXED)
+        # BASE COST (CORRECT LOGIC)
         # -----------------------------
         if scope == "ground_up":
-            print("USING PROJECT TYPE PRICING")
-
             low, high = cost_per_sqft.get(project_type, (200, 400))
             base_cost_per_sqft = (low + high) / 2
-
         else:
-            print("USING SCOPE PRICING")
-
             base_cost_per_sqft = apply_scope_cost(None, scope, city)
-
             low = base_cost_per_sqft * 0.8
             high = base_cost_per_sqft * 1.2
 
-        print("COST PER SQFT:", base_cost_per_sqft)
+        print("COST/SQFT:", base_cost_per_sqft)
 
         base_cost = base_cost_per_sqft * size_sqft
 
@@ -149,7 +158,6 @@ def analyze():
             rooms = data.get("rooms")
 
         room_breakdown, room_total = estimate_rooms(rooms, 1.0)
-
         total_cost = max(total_cost, room_total)
 
         # -----------------------------
@@ -169,13 +177,60 @@ def analyze():
         # FINANCIALS
         # -----------------------------
         budget_gap = budget - total_cost if budget else 0
+        budget_ratio = (budget / total_cost) if (budget and total_cost) else 0
+
+        min_profit = min_bid - total_cost
+        expected_profit = recommended_bid - total_cost
+        max_profit = aggressive_bid - total_cost
+        margin_percent = (expected_profit / recommended_bid * 100) if recommended_bid else 0
 
         # -----------------------------
-        # DECISION
+        # DECISION ENGINE
         # -----------------------------
         lead = lead_score(size_sqft, budget, total_cost)
         decision_label, decision_reason = decision(total_cost, budget)
         decision_color = get_decision_color(decision_label)
+
+        risk = risk_score(
+            budget=budget,
+            cost=total_cost,
+            timeline_months=timeline_months,
+            materials=materials,
+            description=description
+        )
+
+        deal = deal_score(
+            budget=budget,
+            cost=total_cost,
+            risk=risk,
+            margin=margin_percent
+        )
+
+        flags = build_flags(
+            budget=budget,
+            cost=total_cost,
+            timeline_months=timeline_months,
+            materials=materials,
+            description=description,
+            size=size_sqft
+        )
+
+        # -----------------------------
+        # SUMMARY
+        # -----------------------------
+        summary = build_cost_summary(
+            project_type=project_type,
+            size_sqft=size_sqft,
+            city=city,
+            low=low,
+            high=high,
+            base_cost=base_cost,
+            total_cost=total_cost,
+            material_factor=material_factor,
+            labor_factor=labor_factor,
+            timeline_factor=timeline_factor,
+            site_factor=site_factor
+        )
 
         # -----------------------------
         # ANALYSIS
@@ -189,23 +244,74 @@ def analyze():
             timeline_months=timeline_months,
             decision_label=decision_label,
             decision_reason=decision_reason,
-            expected_profit=recommended_bid - total_cost,
-            margin_percent=20,
-            risk=5,
-            deal=5,
-            flags=[]
+            expected_profit=expected_profit,
+            margin_percent=margin_percent,
+            risk=risk,
+            deal=deal,
+            flags=flags
         )
+
+        if client:
+            ai_text = build_ai_analysis(
+                client=client,
+                project=project,
+                project_type=project_type,
+                size_sqft=size_sqft,
+                city=city,
+                materials=materials,
+                budget=budget,
+                timeline_months=timeline_months,
+                description=description,
+                total_cost=total_cost,
+                material_cost=material_cost,
+                labor_cost=labor_cost,
+                recommended_bid=recommended_bid,
+                aggressive_bid=aggressive_bid,
+                min_bid=min_bid,
+                budget_gap=budget_gap,
+                budget_ratio=budget_ratio,
+                lead_score_value=lead,
+                decision_label=decision_label,
+                risk=risk,
+                deal=deal,
+                expected_profit=expected_profit,
+                margin_percent=margin_percent,
+                flags=flags,
+                summary=summary
+            )
+            if ai_text:
+                analysis = ai_text
 
         return jsonify({
             "analysis": analysis,
             "data": {
                 "project_type": project_type,
                 "scope": scope,
+                "size_sqft": size_sqft,
+                "budget": budget,
+                "timeline_months": timeline_months,
                 "total_cost": total_cost,
+                "material_cost": material_cost,
+                "labor_cost": labor_cost,
                 "recommended_bid": recommended_bid,
+                "aggressive_bid": aggressive_bid,
+                "min_bid": min_bid,
+                "budget_gap": budget_gap,
+                "budget_ratio": budget_ratio,
                 "lead_score": lead,
                 "decision": decision_label,
-                "decision_color": decision_color
+                "decision_reason": decision_reason,
+                "decision_color": decision_color,
+                "risk_score": risk,
+                "deal_score": deal,
+                "rooms": room_breakdown,
+                "profit": {
+                    "min_profit": min_profit,
+                    "expected_profit": expected_profit,
+                    "max_profit": max_profit,
+                    "margin_percent": margin_percent
+                },
+                "flags": flags
             }
         })
 
