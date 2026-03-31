@@ -89,6 +89,8 @@ def analyze():
         scope = normalize_scope(scope_input)
         scope = str(scope).lower().strip()
 
+        print("🔥 FINAL SCOPE:", scope)
+
         if not scope or scope == "ground_up":
             if scope_input:
                 text = scope_input.lower()
@@ -117,36 +119,39 @@ def analyze():
         if scope != "ground_up":
             project_type = f"{scope}_project"
 
-# -----------------------------
-# COMPONENT COSTING (SAFE FIX)
-# -----------------------------
-try:
-    result = calculate_component_cost(
-        scope,
-        size_sqft,
-        city,
-        rooms=data.get("rooms")
-    )
+        # -----------------------------
+        # COMPONENT COSTING (SAFE)
+        # -----------------------------
+        try:
+            result = calculate_component_cost(
+                scope,
+                size_sqft,
+                city,
+                rooms=data.get("rooms")
+            )
 
-    if isinstance(result, tuple) and len(result) == 2:
-        component_cost, quantities = result
-    else:
-        component_cost = 0
-        quantities = {}
+            if isinstance(result, tuple) and len(result) == 2:
+                component_cost, quantities = result
+            else:
+                component_cost = 0
+                quantities = {}
 
-    print("🔥 COMPONENT COST:", component_cost)
+            print("🔥 COMPONENT COST:", component_cost)
 
-except Exception as e:
-    print("❌ COMPONENT COST ERROR:", e)
-    component_cost = 0
-    quantities = {}
+        except Exception as e:
+            print("❌ COMPONENT COST ERROR:", e)
+            component_cost = 0
+            quantities = {}
 
+        # -----------------------------
+        # BASE COST LOGIC
+        # -----------------------------
         if scope == "ground_up":
             low, high = cost_per_sqft.get(project_type, (200, 400))
             base_cost_per_sqft = (low + high) / 2
             base_cost = base_cost_per_sqft * size_sqft
 
-        elif component_cost > 0:
+        elif component_cost:
             base_cost = component_cost
             low = base_cost * 0.85
             high = base_cost * 1.15
@@ -204,7 +209,7 @@ except Exception as e:
         margin_percent = (expected_profit / recommended_bid * 100) if recommended_bid else 0
 
         # -----------------------------
-        # CREW + LEAD CLASS (NEW)
+        # METRICS
         # -----------------------------
         estimated_days = estimate_duration(scope, size_sqft)
         lead = lead_score(size_sqft, budget, total_cost)
@@ -242,38 +247,6 @@ except Exception as e:
             materials=materials,
             description=description,
             size=size_sqft
-        )
-
-        # -----------------------------
-        # SUGGESTIONS (NEW)
-        # -----------------------------
-        suggestions = []
-
-        if margin_percent < 15:
-            suggestions.append("Increase bid or reduce labor costs")
-
-        if budget_ratio < 1:
-            suggestions.append("Budget below cost — negotiation likely")
-
-        if timeline_months and estimated_days:
-            if timeline_months * 30 < estimated_days:
-                suggestions.append("Timeline too aggressive — risk of delays")
-
-        # -----------------------------
-        # SUMMARY
-        # -----------------------------
-        summary = build_cost_summary(
-            project_type=project_type,
-            size_sqft=size_sqft,
-            city=city,
-            low=low,
-            high=high,
-            base_cost=base_cost,
-            total_cost=total_cost,
-            material_factor=material_factor,
-            labor_factor=labor_factor,
-            timeline_factor=timeline_factor,
-            site_factor=site_factor
         )
 
         # -----------------------------
@@ -321,7 +294,7 @@ except Exception as e:
                 expected_profit=expected_profit,
                 margin_percent=margin_percent,
                 flags=flags,
-                summary=summary
+                summary={}
             )
             if ai_text:
                 analysis = ai_text
@@ -329,37 +302,11 @@ except Exception as e:
         return jsonify({
             "analysis": analysis,
             "data": {
-                "project_type": project_type,
-                "scope": scope,
-                "size_sqft": size_sqft,
-                "budget": budget,
-                "timeline_months": timeline_months,
                 "total_cost": total_cost,
-                "material_cost": material_cost,
-                "labor_cost": labor_cost,
                 "recommended_bid": recommended_bid,
-                "aggressive_bid": aggressive_bid,
-                "min_bid": min_bid,
-                "budget_gap": budget_gap,
-                "budget_ratio": budget_ratio,
                 "lead_score": lead,
-                "lead_class": lead_class,
                 "decision": decision_label,
-                "decision_reason": decision_reason,
-                "decision_color": decision_color,
-                "risk_score": risk,
-                "deal_score": deal,
-                "rooms": room_breakdown,
-                "quantities": quantities,
-                "estimated_days": estimated_days,
-                "suggestions": suggestions,
-                "profit": {
-                    "min_profit": min_profit,
-                    "expected_profit": expected_profit,
-                    "max_profit": max_profit,
-                    "margin_percent": margin_percent
-                },
-                "flags": flags
+                "quantities": quantities
             }
         })
 
