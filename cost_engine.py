@@ -189,3 +189,85 @@ def estimate_rooms(rooms, location_factor=1.0):
         total += room_total
 
     return results, total
+# =========================
+# COMPONENT COST SYSTEM
+# =========================
+
+COMPONENT_COSTS = {
+    "framing": {
+        "wall_framing_per_sqft": 12,
+        "roof_framing_per_sqft": 10,
+        "labor_per_sqft": 15
+    },
+    "electrical": {
+        "outlet_cost": 150,
+        "panel_cost": 2500,
+        "wiring_per_sqft": 4
+    },
+    "plumbing": {
+        "fixture_cost": 800,
+        "pipe_per_sqft": 5
+    }
+}
+
+
+def estimate_quantities(scope, size_sqft, rooms=None):
+    rooms = rooms or {}
+
+    if scope == "framing":
+        return {
+            "wall_area": size_sqft * 2.5,
+            "roof_area": size_sqft * 1.2
+        }
+
+    elif scope == "electrical":
+        return {
+            "outlets": int(size_sqft / 150),
+            "panels": 1 if size_sqft < 3000 else 2
+        }
+
+    elif scope == "plumbing":
+        return {
+            "fixtures": rooms.get("bathrooms", 1) * 5 + rooms.get("kitchens", 1) * 3
+        }
+
+    return {}
+
+
+def calculate_component_cost(scope, size_sqft, city, rooms=None):
+    quantities = estimate_quantities(scope, size_sqft, rooms)
+    costs = COMPONENT_COSTS.get(scope, {})
+
+    total = 0
+
+    if scope == "framing":
+        total += quantities["wall_area"] * costs["wall_framing_per_sqft"]
+        total += quantities["roof_area"] * costs["roof_framing_per_sqft"]
+        total += size_sqft * costs["labor_per_sqft"]
+
+    elif scope == "electrical":
+        total += quantities["outlets"] * costs["outlet_cost"]
+        total += quantities["panels"] * costs["panel_cost"]
+        total += size_sqft * costs["wiring_per_sqft"]
+
+    elif scope == "plumbing":
+        total += quantities["fixtures"] * costs["fixture_cost"]
+        total += size_sqft * costs["pipe_per_sqft"]
+
+    return total, quantities
+
+
+# =========================
+# CREW PRODUCTION SYSTEM
+# =========================
+
+CREW_PRODUCTION = {
+    "framing": {"sqft_per_day": 800},
+    "electrical": {"sqft_per_day": 600},
+    "plumbing": {"sqft_per_day": 500}
+}
+
+
+def estimate_duration(scope, size_sqft):
+    prod = CREW_PRODUCTION.get(scope, {}).get("sqft_per_day", 500)
+    return round(size_sqft / prod, 1)
