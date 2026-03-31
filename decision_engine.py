@@ -15,7 +15,6 @@ def lead_score(size, budget, cost):
     score = 5
     ratio = (budget / cost) if budget else 0
 
-    # Budget logic (smarter + realistic)
     if not budget or budget <= 0:
         score -= 3
     elif ratio < 0.5:
@@ -25,7 +24,7 @@ def lead_score(size, budget, cost):
     elif ratio < 0.9:
         score -= 1
     elif ratio <= 1.1:
-        score += 1   # 👈 THIS IS THE FIX (normal jobs)
+        score += 1
     elif ratio <= 2:
         score += 2
     elif ratio <= 5:
@@ -33,13 +32,21 @@ def lead_score(size, budget, cost):
     else:
         score += 4
 
-    # Size adjustment
     if size > 10000:
         score += 1
     elif size < 1000:
         score -= 1
 
     return max(1, min(10, score))
+
+
+def classify_lead(budget_ratio, risk, margin):
+    if budget_ratio >= 1.3 and risk <= 3 and margin >= 20:
+        return "A"
+    elif budget_ratio >= 1.0 and risk <= 6:
+        return "B"
+    else:
+        return "C"
 
 
 def decision(total, budget):
@@ -65,8 +72,8 @@ def decision(total, budget):
 
 def risk_score(budget, cost, timeline_months, materials, description):
     risk = 4
-
     ratio = (budget / cost) if (budget and cost) else 0
+
     materials_text = (materials or "").lower()
     description_text = (description or "").lower()
 
@@ -81,7 +88,7 @@ def risk_score(budget, cost, timeline_months, materials, description):
         elif timeline_months > 48:
             risk += 1
 
-    if "luxury" in materials_text or "premium" in materials_text:
+    if "luxury" in materials_text:
         risk += 1
 
     if any(x in description_text for x in ["slope", "steep", "hillside", "limited access", "remote"]):
@@ -124,35 +131,29 @@ def build_flags(budget, cost, timeline_months, materials, description, size):
     description_text = (description or "").lower()
 
     if ratio > 5:
-        flags.append("Budget is far above expected cost; verify scope, land cost, or owner expectations.")
+        flags.append("Budget far above expected cost")
 
     if budget and budget < cost:
-        flags.append("Budget is below estimated cost; expect negotiation pressure or scope reduction.")
-
-    if timeline_months and timeline_months > 48:
-        flags.append("Timeline is unusually long; this may indicate phasing, financing risk, or uncertainty.")
+        flags.append("Budget below estimated cost")
 
     if timeline_months and timeline_months < 6:
-        flags.append("Timeline is aggressive; labor premiums and coordination risk are likely.")
+        flags.append("Aggressive timeline")
 
-    if "luxury" in materials_text or "premium" in materials_text:
-        flags.append("Luxury materials increase procurement volatility and finish-quality risk.")
+    if "luxury" in materials_text:
+        flags.append("High-end materials risk")
 
-    if any(x in description_text for x in ["slope", "steep", "hillside", "limited access", "remote"]):
-        flags.append("Site conditions may increase excavation, access, and foundation complexity.")
+    if any(x in description_text for x in ["slope", "steep", "hillside"]):
+        flags.append("Site complexity risk")
 
     if size > 50000:
-        flags.append("Large project scale increases staging, coordination, and subcontractor management risk.")
-
-    if size < 100:
-        flags.append("Parsed size is unusually small; check input formatting.")
+        flags.append("Large project coordination risk")
 
     return flags
 
 
 def get_decision_color(decision):
-    if decision in ["TAKE JOB", "HIGH VALUE", "STRONG BID"]:
+    if decision in ["TAKE JOB", "HIGH VALUE"]:
         return "green"
-    if decision in ["NEGOTIATE", "CONSIDER"]:
+    if decision in ["NEGOTIATE"]:
         return "yellow"
     return "red"
