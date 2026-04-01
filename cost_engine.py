@@ -131,7 +131,7 @@ def normalize_scope(scope_text):
 
 
 # -----------------------------
-# SCOPE COST
+# FIXED SCOPE COST (IMPORTANT)
 # -----------------------------
 def apply_scope_cost(base_cost_per_sqft, scope, city=None):
     scope_costs = {
