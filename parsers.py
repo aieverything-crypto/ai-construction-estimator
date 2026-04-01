@@ -4,10 +4,12 @@ import re
 def _parse_scientific_like(text: str):
     text = text.strip().lower()
 
+    # 1e6 format
     sci = re.search(r"(\d+\.?\d*)\s*e\s*([+-]?\d+)", text)
     if sci:
         return float(sci.group(1)) * (10 ** int(sci.group(2)))
 
+    # 5 x 10^6 format
     power = re.search(r"(\d+\.?\d*)\s*(?:x|\*|times)?\s*10\^([+-]?\d+)", text)
     if power:
         return float(power.group(1)) * (10 ** int(power.group(2)))
@@ -31,7 +33,7 @@ def parse_budget(text):
     else:
         multiplier = 1
 
-    # Handle shorthand AFTER (this was your bug)
+    # Handle shorthand AFTER (important fix)
     if "b" in text and "billion" not in text:
         multiplier = 1_000_000_000
     elif "m" in text and "million" not in text:
@@ -44,7 +46,6 @@ def parse_budget(text):
         return 0
 
     return float(nums[0]) * multiplier
-    return float(nums[0]) * multiplier
 
 
 def parse_size(text):
@@ -53,6 +54,7 @@ def parse_size(text):
 
     text = str(text).lower().replace(",", "").strip()
 
+    # Scientific formats
     sci_value = _parse_scientific_like(text)
     if sci_value is not None:
         return sci_value
@@ -65,6 +67,7 @@ def parse_size(text):
     elif "thousand" in text:
         multiplier = 1_000
 
+    # Normalize dimensions like "20 by 30"
     text = re.sub(r"\s*by\s*", "x", text)
     text = re.sub(r"\s*x\s*", "x", text)
 
@@ -74,12 +77,14 @@ def parse_size(text):
         if nums:
             return float(nums[0]) * multiplier * 10.7639
 
+    # Clean units
     text = text.replace("square feet", "")
     text = text.replace("sqft", "")
     text = text.replace("sq ft", "")
     text = text.replace("ft", "")
     text = text.strip()
 
+    # Handle dimensions like 20x30
     if "x" in text:
         parts = text.split("x")
         if len(parts) == 2:
