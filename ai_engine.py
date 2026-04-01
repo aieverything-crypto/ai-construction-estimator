@@ -13,27 +13,25 @@ def build_fallback_analysis(
     deal,
     flags
 ):
-    flags_text = "\n".join([f"- {f}" for f in flags]) if flags else "- No major red flags."
+    flags_text = "\n".join([f"- {f}" for f in flags]) if flags else "- No major red flags detected."
 
     return f"""
 Project: {project or "N/A"}
-Type: {project_type}
+Project Type: {project_type}
 Location: {city or "N/A"}
 Size: {round(size_sqft):,} sqft
-
 Estimated Cost: ${round(total_cost):,}
-Timeline: {round(timeline_months,1) if timeline_months else "N/A"} months
+Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
 
 Decision: {decision_label}
 Reason: {decision_reason}
 
 Expected Profit: ${round(expected_profit):,}
-Margin: {round(margin_percent,1)}%
+Expected Margin: {round(margin_percent, 1)}%
+Risk Score: {risk}/10
+Deal Score: {deal}/10
 
-Risk: {risk}/10
-Deal: {deal}/10
-
-Flags:
+Red Flags:
 {flags_text}
 """.strip()
 
@@ -67,71 +65,75 @@ def build_ai_analysis(
 ):
     try:
         prompt = f"""
-You are a senior construction estimator evaluating a real job.
+You are a senior construction estimator writing a contractor-facing report.
 
-Be:
-- practical
-- skeptical
-- financially focused
-- like a contractor deciding whether to bid
+STRICT RULES:
+- Use ONLY the values below
+- DO NOT invent numbers
+- DO NOT change units
+- Ground the report in practical construction reasoning
 
-PROJECT:
-{project_type}, {round(size_sqft):,} sqft in {city}
-
-KEY NUMBERS:
-- Estimated Cost: ${round(total_cost):,}
+PROJECT DATA:
+- Project Name: {project}
+- Project Type: {project_type}
+- Size: {round(size_sqft):,} sqft
+- Location: {city}
+- Materials: {materials}
 - Budget: ${round(budget):,}
-- Budget Ratio: {round(budget_ratio,2)}x
-- Timeline: {round(timeline_months,1) if timeline_months else "unknown"} months
+- Timeline: {round(timeline_months, 1) if timeline_months else "unknown"} months
+- Description: {description}
 
-COST BREAKDOWN:
-- Materials: ${round(material_cost):,}
-- Labor: ${round(labor_cost):,}
+COST MODEL:
+- Base low/high cost per sqft: ${summary["base_range_low_per_sqft"]} / ${summary["base_range_high_per_sqft"]}
+- Base cost before adjustments: ${round(summary["base_cost"]):,}
+- Material factor: {round(summary["material_factor"], 2)}
+- Labor factor: {round(summary["labor_factor"], 2)}
+- Timeline factor: {round(summary["timeline_factor"], 2)}
+- Site factor: {round(summary["site_factor"], 2)}
 
-BIDDING:
-- Recommended: ${round(recommended_bid):,}
-- Aggressive: ${round(aggressive_bid):,}
-- Minimum: ${round(min_bid):,}
-
-METRICS:
-- Margin: {round(margin_percent,1)}%
-- Expected Profit: ${round(expected_profit):,}
-- Risk: {risk}/10
+OUTPUT VALUES:
+- Estimated Cost: ${round(total_cost):,}
+- Material Cost: ${round(material_cost):,}
+- Labor Cost: ${round(labor_cost):,}
+- Recommended Bid: ${round(recommended_bid):,}
+- Aggressive Bid: ${round(aggressive_bid):,}
+- Minimum Bid: ${round(min_bid):,}
+- Budget Gap: ${round(budget_gap):,}
+- Budget Ratio: {round(budget_ratio, 2)}x
+- Lead Score: {lead_score_value}/10
+- Decision: {decision_label}
+- Risk Score: {risk}/10
 - Deal Score: {deal}/10
+- Expected Profit at Recommended Bid: ${round(expected_profit):,}
+- Margin at Recommended Bid: {round(margin_percent, 1)}%
+- Red Flags: {"; ".join(flags) if flags else "None"}
 
-FLAGS:
-{"; ".join(flags) if flags else "None"}
+Write under these exact headings:
 
-Write like a contractor deciding if this job is worth it.
+## 1. Cost Realism
+## 2. Key Cost Drivers
+## 3. Contractor Decision
+## 4. Profit Outlook
+## 5. Risk Level
+## 6. Bid Strategy
+## 7. Red Flags
 
-STRUCTURE:
-
-## 1. Cost Reality
-## 2. Cost Drivers
-## 3. Take or Pass
-## 4. Profit Reality
-## 5. Risk
-## 6. Recommendation
-
-Be direct. No fluff. No generic AI language.
+Be specific, realistic, and useful to a contractor deciding whether to pursue the job.
 """
 
-        response = client.chat.completions.create(
+        res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a blunt, experienced construction estimator."},
+                {"role": "system", "content": "You are a practical construction estimator and bid advisor."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3
+            temperature=0.4
         )
 
-        content = response.choices[0].message.content
+        content = res.choices[0].message.content
 
-        if content and content.strip():
-            return content.strip()
-
-        return None
+        return content.strip() if content and content.strip() else None
 
     except Exception as e:
-        print("AI error:", e)
+        print("AI analysis error:", e)
         return None
