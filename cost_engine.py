@@ -149,9 +149,15 @@ def apply_scope_cost(base_cost_per_sqft, scope, city=None, size_sqft=2000):
         return base_cost_per_sqft if base_cost_per_sqft else 200
 
     low, high = scope_costs[scope]
-    low, high = scope_costs[scope]
     avg = (low + high) / 2
 
+    # Size scaling (important for realism)
+    if size_sqft < 1500:
+        avg *= 1.15
+    elif size_sqft > 5000:
+        avg *= 0.9
+
+    return avg
     # Size scaling (important for realism)
     if size_sqft < 1500:
         avg *= 1.15
