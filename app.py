@@ -166,6 +166,15 @@ def analyze():
 
         total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
 
+        contingency_factor = estimate_contingency(
+            scope=scope,
+            timeline_months=timeline_months,
+            materials=materials,
+            description=description
+        )
+
+        total_cost = total_cost * (1 + contingency_factor)
+
         # -----------------------------
         # COST STABILITY LIMITS
         # -----------------------------
@@ -318,6 +327,7 @@ def analyze():
                 "budget": budget,
                 "timeline_months": timeline_months,
                 "total_cost": total_cost,
+                "contingency_percent": round(contingency_factor * 100, 1),
                 "material_cost": material_cost,
                 "labor_cost": labor_cost,
                 "recommended_bid": recommended_bid,
