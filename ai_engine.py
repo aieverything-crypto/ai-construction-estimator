@@ -11,7 +11,8 @@ def build_fallback_analysis(
     margin_percent,
     risk,
     deal,
-    flags
+    flags,
+    contingency_percent=0
 ):
     flags_text = "\n".join([f"- {f}" for f in flags]) if flags else "- No major red flags detected."
 
@@ -21,6 +22,7 @@ Project Type: {project_type}
 Location: {city or "N/A"}
 Size: {round(size_sqft):,} sqft
 Estimated Cost: ${round(total_cost):,}
+Estimated Contingency: {round(contingency_percent, 1)}%
 Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
 
 Decision: {decision_label}
