@@ -45,13 +45,21 @@ def adjustments(materials, city, timeline, description):
     if "glass" in materials_text:
         material_factor += 0.08
 
-    if any(x in city_text for x in ["san francisco", "new york", "seattle", "boston", "dubai"]):
+    if any(x in city_text for x in ["san francisco", "new york", "seattle", "boston", "dubai", "honolulu"]):
         labor_factor += 0.30
-    elif any(x in city_text for x in ["los angeles", "san jose", "san diego", "las vegas"]):
-        labor_factor += 0.10
+    elif any(x in city_text for x in ["los angeles", "san jose", "san diego", "miami", "austin", "las vegas"]):
+        labor_factor += 0.15
+    elif any(x in city_text for x in ["phoenix", "dallas", "houston", "orlando", "tampa"]):
+        labor_factor += 0.08
 
     if "rush" in timeline_text or "asap" in timeline_text:
-        timeline_factor += 0.20
+        timeline_factor += 0.30
+
+    # Time-based realism
+    if any(x in timeline_text for x in ["1 month", "2 month", "3 month"]):
+        timeline_factor += 0.25
+    elif any(x in timeline_text for x in ["4 month", "5 month", "6 month"]):
+        timeline_factor += 0.10
 
     if any(x in description_text for x in ["slope", "steep", "hillside"]):
         site_factor += 0.20
