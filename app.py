@@ -27,6 +27,26 @@ from parsers import parse_budget, parse_size, extract_timeline_months
 from ai_engine import build_fallback_analysis, build_ai_analysis
 from plan_engine import analyze_uploaded_plan
 
+def estimate_contingency(scope, timeline_months, materials, description):
+    contingency = 0.05  # base 5%
+
+    materials_text = (materials or "").lower()
+    description_text = (description or "").lower()
+
+    if scope in ["ground_up", "foundation", "remodel"]:
+        contingency += 0.03
+
+    if timeline_months and timeline_months < 6:
+        contingency += 0.03
+
+    if "luxury" in materials_text or "premium" in materials_text or "high end" in materials_text:
+        contingency += 0.02
+
+    if any(x in description_text for x in ["slope", "steep", "hillside", "limited access", "remote"]):
+        contingency += 0.04
+
+    return min(contingency, 0.18)
+    
 app = Flask(__name__)
 CORS(app)
 
