@@ -284,6 +284,7 @@ def analyze():
             margin_percent=margin_percent,
             risk=risk,
             deal=deal,
+            contingency_percent=contingency_factor * 100,
             flags=flags
         )
 
