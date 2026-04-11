@@ -126,7 +126,7 @@ def analyze():
             low, high = cost_per_sqft.get(project_type, (200, 400))
             base_cost_per_sqft = (low + high) / 2
         else:
-            base_cost_per_sqft = apply_scope_cost(None, scope, city)
+            base_cost_per_sqft = apply_scope_cost(None, scope, city, size_sqft)
             low = base_cost_per_sqft * 0.8
             high = base_cost_per_sqft * 1.2
 
