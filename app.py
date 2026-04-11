@@ -119,7 +119,7 @@ def analyze():
         if scope != "ground_up":
             project_type = f"{scope}_project"
 
-        # -----------------------------
+                # -----------------------------
         # BASE COST
         # -----------------------------
         if scope == "ground_up":
@@ -132,17 +132,7 @@ def analyze():
 
         print("COST/SQFT:", base_cost_per_sqft)
 
-        # -----------------------------
-        # COST STABILITY LIMITS
-        # -----------------------------
-
-        # Prevent unrealistically low values
-        min_cost = size_sqft * 8
-        total_cost = max(total_cost, min_cost)
-
-        # Prevent unrealistic spikes
-        max_cost = size_sqft * 600
-        total_cost = min(total_cost, max_cost)
+        base_cost = base_cost_per_sqft * size_sqft
 
         # -----------------------------
         # ADJUSTMENTS
@@ -157,14 +147,21 @@ def analyze():
         total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
 
         # -----------------------------
+        # COST STABILITY LIMITS
+        # -----------------------------
+        min_cost = size_sqft * 8
+        total_cost = max(total_cost, min_cost)
+
+        max_cost = size_sqft * 600
+        total_cost = min(total_cost, max_cost)
+
+        # -----------------------------
         # ROOM BREAKDOWN
         # -----------------------------
         rooms = []
         if isinstance(data.get("rooms"), list):
             rooms = data.get("rooms")
 
-        room_breakdown, room_total = estimate_rooms(rooms, 1.0)
-        # Blend room estimate instead of overriding
         room_breakdown, room_total = estimate_rooms(rooms, 1.0)
 
         if room_total > 0:
