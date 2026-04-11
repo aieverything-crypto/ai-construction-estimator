@@ -20,7 +20,7 @@ def build_fallback_analysis(
 Project: {project or "N/A"}
 Project Type: {project_type}
 Location: {city or "N/A"}
-Size: {round(size_sqft):,} sqft
+Size: {round(size_sqft, -2):,} sqft
 Estimated Cost: ${round(total_cost, -3):,}
 Estimated Contingency: {round(contingency_percent, 1)}%
 Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
@@ -28,7 +28,7 @@ Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
 Decision: {decision_label}
 Reason: {decision_reason}
 
-Expected Profit: ${round(expected_profit):,}
+Expected Profit: ${round(expected_profit, -3):,}
 Expected Margin: {round(margin_percent, 1)}%
 Risk Score: {risk}/10
 Deal Score: {deal}/10
