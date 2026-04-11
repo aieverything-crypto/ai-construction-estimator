@@ -135,11 +135,11 @@ def normalize_scope(scope_text):
 # -----------------------------
 def apply_scope_cost(base_cost_per_sqft, scope, city=None, size_sqft=2000):
     scope_costs = {
-        "framing": (20, 45),
-        "foundation": (15, 40),
-        "roofing": (10, 30),
-        "electrical": (10, 25),
-        "plumbing": (12, 30),
+        "framing": (25, 50),
+        "foundation": (18, 45),
+        "roofing": (12, 35),
+        "electrical": (12, 30),
+        "plumbing": (15, 35),
         "hvac": (10, 25),
         "interior": (30, 80),
         "remodel": (60, 150)
