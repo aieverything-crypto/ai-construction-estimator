@@ -132,7 +132,17 @@ def analyze():
 
         print("COST/SQFT:", base_cost_per_sqft)
 
-        base_cost = base_cost_per_sqft * size_sqft
+        # -----------------------------
+        # COST STABILITY LIMITS
+        # -----------------------------
+
+        # Prevent unrealistically low values
+        min_cost = size_sqft * 8
+        total_cost = max(total_cost, min_cost)
+
+        # Prevent unrealistic spikes
+        max_cost = size_sqft * 600
+        total_cost = min(total_cost, max_cost)
 
         # -----------------------------
         # ADJUSTMENTS
@@ -144,10 +154,7 @@ def analyze():
             description=description
         )
 
-        if scope == "ground_up":
-            total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
-        else:
-            total_cost = base_cost * (1 + (labor_factor - 1) * 0.5)
+        total_cost = base_cost * material_factor * labor_factor * timeline_factor * site_factor
 
         # -----------------------------
         # ROOM BREAKDOWN
@@ -157,7 +164,11 @@ def analyze():
             rooms = data.get("rooms")
 
         room_breakdown, room_total = estimate_rooms(rooms, 1.0)
-        total_cost = max(total_cost, room_total)
+        # Blend room estimate instead of overriding
+        room_breakdown, room_total = estimate_rooms(rooms, 1.0)
+
+        if room_total > 0:
+            total_cost = (total_cost * 0.7) + (room_total * 0.3)
 
         # -----------------------------
         # COST SPLITS
