@@ -12,28 +12,67 @@ def build_fallback_analysis(
     risk,
     deal,
     flags,
-    contingency_percent=0
+    contingency_percent=0,
+    budget=0,
+    budget_gap=0,
+    recommended_bid=0,
+    aggressive_bid=0,
+    min_bid=0
 ):
     flags_text = "\n".join([f"- {f}" for f in flags]) if flags else "- No major red flags detected."
 
+    budget_text = "No valid budget provided."
+    if budget and total_cost:
+        ratio = budget / total_cost
+        if ratio >= 1.3:
+            budget_text = "Budget is comfortably above estimated cost and supports healthy margin."
+        elif ratio >= 1.0:
+            budget_text = "Budget is in range of estimated cost and appears workable."
+        elif ratio >= 0.9:
+            budget_text = "Budget is slightly below estimated cost and likely requires negotiation."
+        elif ratio >= 0.75:
+            budget_text = "Budget is materially below estimated cost and carries real bid risk."
+        else:
+            budget_text = "Budget is far below estimated cost and is not currently viable without major change."
+
     return f"""
+PROJECT SUMMARY
+---------------
 Project: {project or "N/A"}
 Project Type: {project_type}
 Location: {city or "N/A"}
-Size: {round(size_sqft, -2):,} sqft
-Estimated Cost: ${round(total_cost, -3):,}
+Size: {int(round(size_sqft, -2)):,} sqft
+Estimated Cost: ${int(round(total_cost, -3)):,}
 Estimated Contingency: {round(contingency_percent, 1)}%
 Timeline: {round(timeline_months, 1) if timeline_months else "N/A"} months
 
+BUDGET POSITION
+---------------
+Client Budget: ${int(round(budget, -3)):,}""" + (f"""
+Budget Gap: ${int(round(budget_gap, -3)):,}""" if budget else """
+Budget Gap: N/A""") + f"""
+Assessment: {budget_text}
+
+BID STRATEGY
+------------
+Recommended Bid: ${int(round(recommended_bid, -3)):,}
+Aggressive Bid: ${int(round(aggressive_bid, -3)):,}
+Minimum Bid: ${int(round(min_bid, -3)):,}
+
+DECISION
+--------
 Decision: {decision_label}
 Reason: {decision_reason}
 
-Expected Profit: ${round(expected_profit, -3):,}
+PROFIT / RISK
+-------------
+Expected Profit: ${int(round(expected_profit, -3)):,}
 Expected Margin: {round(margin_percent, 1)}%
 Risk Score: {risk}/10
 Deal Score: {deal}/10
 
-Red Flags:
+RED FLAGS
+---------
 {flags_text}
 """.strip()
 
@@ -67,46 +106,53 @@ def build_ai_analysis(
 ):
     try:
         prompt = f"""
-You are a senior construction estimator writing a contractor-facing report.
+You are a senior construction estimator and bid reviewer writing a contractor-facing report.
 
 STRICT RULES:
 - Use ONLY the values below
 - DO NOT invent numbers
 - DO NOT change units
-- Ground the report in practical construction reasoning
+- DO NOT act like a sales assistant or consultant
+- Write like an estimator reviewing whether a job is worth pursuing
+- Keep the tone practical, direct, and grounded in contractor decision-making
+- If the budget is below cost, say so clearly
+- If the job is risky, say why in plain language
+- Do not use vague filler like "careful consideration should be given"
+- Avoid repeating the same point in multiple sections
 
 PROJECT DATA:
 - Project Name: {project}
 - Project Type: {project_type}
-- Size: {round(size_sqft):,} sqft
+- Size: {int(round(size_sqft, -2)):,} sqft
 - Location: {city}
 - Materials: {materials}
-- Budget: ${round(budget):,}
+- Budget: ${int(round(budget, -3)):,}
 - Timeline: {round(timeline_months, 1) if timeline_months else "unknown"} months
 - Description: {description}
 
 COST MODEL:
-- Base low/high cost per sqft: ${summary["base_range_low_per_sqft"]} / ${summary["base_range_high_per_sqft"]}
-- Base cost before adjustments: ${round(summary["base_cost"]):,}
+- Base low cost per sqft: ${round(summary["base_range_low_per_sqft"], 2)}
+- Base high cost per sqft: ${round(summary["base_range_high_per_sqft"], 2)}
+- Base cost before adjustments: ${int(round(summary["base_cost"], -3)):,}
 - Material factor: {round(summary["material_factor"], 2)}
 - Labor factor: {round(summary["labor_factor"], 2)}
 - Timeline factor: {round(summary["timeline_factor"], 2)}
 - Site factor: {round(summary["site_factor"], 2)}
 
 OUTPUT VALUES:
-- Estimated Cost: ${round(total_cost):,}
-- Material Cost: ${round(material_cost):,}
-- Labor Cost: ${round(labor_cost):,}
-- Recommended Bid: ${round(recommended_bid):,}
-- Aggressive Bid: ${round(aggressive_bid):,}
-- Minimum Bid: ${round(min_bid):,}
-- Budget Gap: ${round(budget_gap):,}
+- Estimated Cost: ${int(round(total_cost, -3)):,}
+- Material Cost: ${int(round(material_cost, -3)):,}
+- Labor Cost: ${int(round(labor_cost, -3)):,}
+- Recommended Bid: ${int(round(recommended_bid, -3)):,}
+- Aggressive Bid: ${int(round(aggressive_bid, -3)):,}
+- Minimum Bid: ${int(round(min_bid, -3)):,}
+- Budget Gap: ${int(round(budget_gap, -3)):,}
 - Budget Ratio: {round(budget_ratio, 2)}x
 - Lead Score: {lead_score_value}/10
 - Decision: {decision_label}
 - Risk Score: {risk}/10
 - Deal Score: {deal}/10
-- Expected Profit at Recommended Bid: ${round(expected_profit):,}
+- Expected Profit at Recommended Bid: ${int(round(expected_profit, -3)):,}
 - Margin at Recommended Bid: {round(margin_percent, 1)}%
 - Red Flags: {"; ".join(flags) if flags else "None"}
 
@@ -120,20 +166,29 @@ Write under these exact headings:
 ## 6. Bid Strategy
 ## 7. Red Flags
 
-Be specific, realistic, and useful to a contractor deciding whether to pursue the job.
+Writing instructions:
+- Keep each section tight and useful
+- Prefer short paragraphs over long ones
+- In Contractor Decision, explicitly state whether the budget is workable
+- In Bid Strategy, explain when the recommended bid is likely too high for the client budget
+- In Profit Outlook, do not present profit as truly achievable if the bid is not realistic relative to budget
+- In Red Flags, be concrete and blunt
+- Sound like a contractor advisor, not a generic AI summary tool
 """
 
         res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a practical construction estimator and bid advisor."},
+                {
+                    "role": "system",
+                    "content": "You are a practical construction estimator and bid advisor. You write like a real estimator reviewing job viability, budget fit, risk, and bid strategy."
+                },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.4
+            temperature=0.25
         )
 
         content = res.choices[0].message.content
-
         return content.strip() if content and content.strip() else None
 
     except Exception as e:
