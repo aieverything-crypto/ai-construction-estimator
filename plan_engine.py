@@ -599,7 +599,29 @@ def merge_plan_data(pre, ai):
                 merged[key] = value
 
     return merged
+    
+def sanitize_plan_data(data):
+    # Bedrooms sanity
+    if data.get("bedrooms"):
+        if data["bedrooms"] < 0 or data["bedrooms"] > 20:
+            data["bedrooms"] = None
 
+    # Bathrooms sanity
+    if data.get("bathrooms"):
+        if data["bathrooms"] < 0 or data["bathrooms"] > 20:
+            data["bathrooms"] = None
+
+    # Stories sanity
+    if data.get("stories"):
+        if data["stories"] > 10:
+            data["stories"] = None
+
+    # Sqft sanity
+    if data.get("estimated_size_sqft"):
+        if data["estimated_size_sqft"] < 200 or data["estimated_size_sqft"] > 20000:
+            data["estimated_size_sqft"] = None
+
+    return data
 
 def build_ai_prompt(extracted_text, pre_data):
     pre_json = json.dumps(pre_data, indent=2)
@@ -787,10 +809,12 @@ def analyze_uploaded_plan(client, file_obj):
 
             if extracted_text and len(extracted_text.strip()) > 50:
                 pre_data = pre_extract_plan_data(extracted_text)
+                pre_data = sanitize_plan_data(pre_data)
 
                 try:
                     raw, ai_parsed = analyze_pdf_text_with_ai(client, extracted_text, pre_data)
                     merged = merge_plan_data(pre_data, ai_parsed)
+                    merged = sanitize_plan_data(merged)
 
                     return {
                         "mode": "pdf_text_hybrid",
