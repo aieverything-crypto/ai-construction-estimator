@@ -284,8 +284,13 @@ def analyze():
             margin_percent=margin_percent,
             risk=risk,
             deal=deal,
+            flags=flags,
             contingency_percent=contingency_factor * 100,
-            flags=flags
+            budget=budget,
+            budget_gap=budget_gap,
+            recommended_bid=recommended_bid,
+            aggressive_bid=aggressive_bid,
+            min_bid=min_bid
         )
 
         if client:
