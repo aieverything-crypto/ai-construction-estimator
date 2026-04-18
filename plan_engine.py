@@ -782,28 +782,46 @@ def analyze_uploaded_plan(client, file_obj):
     # PDF PATH
     # =========================
     if is_pdf:
-        extracted_text = extract_pdf_text(file_bytes)
+        try:
+            extracted_text = extract_pdf_text(file_bytes)
 
-        if extracted_text and len(extracted_text.strip()) > 50:
-            pre_data = pre_extract_plan_data(extracted_text)
+            if extracted_text and len(extracted_text.strip()) > 50:
+                pre_data = pre_extract_plan_data(extracted_text)
 
-            try:
-                raw, ai_parsed = analyze_pdf_text_with_ai(client, extracted_text, pre_data)
-                merged = merge_plan_data(pre_data, ai_parsed)
+                try:
+                    raw, ai_parsed = analyze_pdf_text_with_ai(client, extracted_text, pre_data)
+                    merged = merge_plan_data(pre_data, ai_parsed)
 
-                return {
-                    "mode": "pdf_text_hybrid",
-                    "raw": raw,
-                    "parsed": merged,
-                    "pre_extracted": pre_data
-                }
-            except Exception as e:
-                return {
-                    "mode": "pdf_text_preextract_only",
-                    "raw": str(e),
-                    "parsed": pre_data,
-                    "pre_extracted": pre_data
-                }
+                    return {
+                        "mode": "pdf_text_hybrid",
+                        "raw": raw,
+                        "parsed": merged,
+                        "pre_extracted": pre_data
+                    }
+
+                except Exception as e:
+                    return {
+                        "mode": "pdf_text_preextract_only",
+                        "raw": str(e),
+                        "parsed": pre_data,
+                        "pre_extracted": pre_data
+                    }
+
+            # PDF exists, but no usable text was extracted
+            return {
+                "mode": "pdf_no_text",
+                "raw": "PDF uploaded but no usable text was extracted.",
+                "parsed": {},
+                "pre_extracted": {}
+            }
+
+        except Exception as e:
+            return {
+                "mode": "pdf_error",
+                "raw": str(e),
+                "parsed": {},
+                "pre_extracted": {}
+            }
 
     # =========================
     # IMAGE FALLBACK
@@ -820,6 +838,6 @@ def analyze_uploaded_plan(client, file_obj):
         return {
             "mode": "error",
             "raw": str(e),
-            "parsed": None,
+            "parsed": {},
             "pre_extracted": {}
         }
