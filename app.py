@@ -60,6 +60,10 @@ if api_key:
 def home():
     return {"status": "construction intelligence system running"}
 
+# 🔧 TEST ROUTE (ADD THIS RIGHT BELOW)
+@app.route("/plan-ping", methods=["GET", "POST"])
+def plan_ping():
+    return jsonify({"ok": True, "route": "plan-ping works"})
 
 @app.route("/analyze-plan", methods=["POST"])
 def analyze_plan():
