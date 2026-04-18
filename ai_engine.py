@@ -174,6 +174,9 @@ Writing instructions:
 - In Profit Outlook, do not present profit as truly achievable if the bid is not realistic relative to budget
 - In Red Flags, be concrete and blunt
 - Sound like a contractor advisor, not a generic AI summary tool
+- Prefer direct, contractor-style language over formal phrasing
+- Avoid repeating the same budget gap explanation across multiple sections
+- If the job is not viable, state it clearly and move on without over-explaining
 """
 
         res = client.chat.completions.create(
