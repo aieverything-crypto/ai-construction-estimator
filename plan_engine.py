@@ -834,7 +834,11 @@ def analyze_uploaded_plan(client, file_obj):
     file_bytes = file_obj.read()
     filename = getattr(file_obj, "filename", "").lower()
     is_pdf = filename.endswith(".pdf")
-file_size_mb = len(file_bytes) / (1024 * 1024)
+
+    # -------------------------
+    # FILE SIZE GUARD
+    # -------------------------
+    file_size_mb = len(file_bytes) / (1024 * 1024)
 
     if file_size_mb > 20:
         return {
@@ -845,10 +849,11 @@ file_size_mb = len(file_bytes) / (1024 * 1024)
             },
             "pre_extracted": {}
         }
+
     try:
-        # -------------------------
+        # =========================
         # PDF PATH
-        # -------------------------
+        # =========================
         if is_pdf:
             page_count = get_pdf_page_count(file_bytes)
 
@@ -861,9 +866,12 @@ file_size_mb = len(file_bytes) / (1024 * 1024)
                     },
                     "pre_extracted": {}
                 }
+
             extracted_text = extract_pdf_text(file_bytes)
 
-            # Text-based PDF path
+            # -------------------------
+            # TEXT-BASED PDF
+            # -------------------------
             if extracted_text and len(extracted_text.strip()) > 50:
                 pre_data = pre_extract_plan_data(extracted_text)
                 pre_data = sanitize_plan_data(pre_data)
@@ -871,6 +879,7 @@ file_size_mb = len(file_bytes) / (1024 * 1024)
                 try:
                     safe_text = limit_text(extracted_text, 12000)
                     raw, ai_parsed = analyze_pdf_text_with_ai(client, safe_text, pre_data)
+
                     merged = merge_plan_data(pre_data, ai_parsed)
                     merged = sanitize_plan_data(merged)
 
@@ -889,7 +898,9 @@ file_size_mb = len(file_bytes) / (1024 * 1024)
                         "pre_extracted": pre_data
                     }
 
-            # No-text scanned PDF path — safe response for now
+            # -------------------------
+            # SCANNED / IMAGE-BASED PDF
+            # -------------------------
             return {
                 "mode": "pdf_no_text",
                 "raw": "PDF uploaded, but no usable text was extracted.",
@@ -899,9 +910,9 @@ file_size_mb = len(file_bytes) / (1024 * 1024)
                 "pre_extracted": {}
             }
 
-        # -------------------------
+        # =========================
         # IMAGE PATH
-        # -------------------------
+        # =========================
         try:
             raw, parsed = analyze_image_with_ai(client, file_bytes)
             parsed = sanitize_plan_data(parsed or {})
@@ -932,4 +943,3 @@ file_size_mb = len(file_bytes) / (1024 * 1024)
             },
             "pre_extracted": {}
         }
- 
