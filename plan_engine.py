@@ -833,45 +833,22 @@ def analyze_uploaded_plan(client, file_obj):
         if is_pdf:
             extracted_text = extract_pdf_text(file_bytes)
 
+            # Text-based PDF path
             if extracted_text and len(extracted_text.strip()) > 50:
                 pre_data = pre_extract_plan_data(extracted_text)
+                pre_data = sanitize_plan_data(pre_data)
 
                 try:
                     safe_text = limit_text(extracted_text, 12000)
                     raw, ai_parsed = analyze_pdf_text_with_ai(client, safe_text, pre_data)
                     merged = merge_plan_data(pre_data, ai_parsed)
-
-                    # Scanned PDF fallback: render first page as image
-                    page_image = render_pdf_page_to_png(file_bytes, page_number=0)
-
-                    if page_image:
-                        try:
-                            raw, parsed = analyze_image_with_ai(client, page_image)
-
-                            return {
-                                "mode": "pdf_image_page_1",
-                                "raw": raw,
-                                "parsed": parsed or {},
-                                "pre_extracted": {}
-                            }
-
-                        except Exception as e:
-                            return {
-                                "mode": "pdf_image_error",
-                                "raw": str(e),
-                                "parsed": {
-                                    "notes": "PDF had no readable text, and image-based analysis failed."
-                                },
-                                "pre_extracted": {}
-                            }
+                    merged = sanitize_plan_data(merged)
 
                     return {
-                        "mode": "pdf_no_text",
-                        "raw": "PDF uploaded, but no readable text could be extracted or rendered.",
-                        "parsed": {
-                            "notes": "No readable PDF text extracted. This may be a scanned plan."
-                        },
-                        "pre_extracted": {}
+                        "mode": "pdf_text_hybrid",
+                        "raw": raw,
+                        "parsed": merged,
+                        "pre_extracted": pre_data
                     }
 
                 except Exception as e:
@@ -882,10 +859,13 @@ def analyze_uploaded_plan(client, file_obj):
                         "pre_extracted": pre_data
                     }
 
+            # No-text scanned PDF path — safe response for now
             return {
                 "mode": "pdf_no_text",
                 "raw": "PDF uploaded, but no usable text was extracted.",
-                "parsed": {},
+                "parsed": {
+                    "notes": "No readable PDF text extracted. This may be a scanned/image-based plan."
+                },
                 "pre_extracted": {}
             }
 
@@ -894,11 +874,12 @@ def analyze_uploaded_plan(client, file_obj):
         # -------------------------
         try:
             raw, parsed = analyze_image_with_ai(client, file_bytes)
+            parsed = sanitize_plan_data(parsed or {})
 
             return {
                 "mode": "image",
                 "raw": raw,
-                "parsed": parsed or {},
+                "parsed": parsed,
                 "pre_extracted": {}
             }
 
@@ -906,7 +887,9 @@ def analyze_uploaded_plan(client, file_obj):
             return {
                 "mode": "image_error",
                 "raw": str(e),
-                "parsed": {},
+                "parsed": {
+                    "notes": "Image analysis failed."
+                },
                 "pre_extracted": {}
             }
 
@@ -914,25 +897,9 @@ def analyze_uploaded_plan(client, file_obj):
         return {
             "mode": "plan_analysis_error",
             "raw": str(e),
-            "parsed": {},
+            "parsed": {
+                "notes": "Plan analysis failed safely."
+            },
             "pre_extracted": {}
         }
-
-    # =========================
-    # IMAGE FALLBACK
-    # =========================
-    try:
-        raw, parsed = analyze_image_with_ai(client, file_bytes)
-        return {
-            "mode": "image",
-            "raw": raw,
-            "parsed": parsed,
-            "pre_extracted": {}
-        }
-    except Exception as e:
-        return {
-            "mode": "error",
-            "raw": str(e),
-            "parsed": {},
-            "pre_extracted": {}
-        }
+ 
