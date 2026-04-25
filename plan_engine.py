@@ -15,7 +15,11 @@ def safe_float(value):
     except Exception:
         return None
 
-
+def limit_text(text, max_chars=12000):
+    if not text:
+        return ""
+    return text[:max_chars]
+    
 def extract_pdf_text(file_bytes):
     """
     Extract text from PDF using PyMuPDF.
@@ -689,7 +693,7 @@ PRE_EXTRACTED_HINTS:
 {pre_json}
 
 PLAN_TEXT:
-{extracted_text[:22000]}
+{extracted_text[:12000]}
 """
 
 
@@ -811,7 +815,8 @@ def analyze_uploaded_plan(client, file_obj):
                 pre_data = pre_extract_plan_data(extracted_text)
 
                 try:
-                    raw, ai_parsed = analyze_pdf_text_with_ai(client, extracted_text, pre_data)
+                    safe_text = limit_text(extracted_text, 12000)
+                    raw, ai_parsed = analyze_pdf_text_with_ai(client, safe_text, pre_data)
                     merged = merge_plan_data(pre_data, ai_parsed)
 
                     return {
