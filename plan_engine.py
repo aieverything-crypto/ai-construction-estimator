@@ -800,21 +800,19 @@ def analyze_uploaded_plan(client, file_obj):
     filename = getattr(file_obj, "filename", "").lower()
     is_pdf = filename.endswith(".pdf")
 
-    # =========================
-    # PDF PATH
-    # =========================
-    if is_pdf:
-        try:
+    try:
+        # -------------------------
+        # PDF PATH
+        # -------------------------
+        if is_pdf:
             extracted_text = extract_pdf_text(file_bytes)
 
             if extracted_text and len(extracted_text.strip()) > 50:
                 pre_data = pre_extract_plan_data(extracted_text)
-                pre_data = sanitize_plan_data(pre_data)
 
                 try:
                     raw, ai_parsed = analyze_pdf_text_with_ai(client, extracted_text, pre_data)
                     merged = merge_plan_data(pre_data, ai_parsed)
-                    merged = sanitize_plan_data(merged)
 
                     return {
                         "mode": "pdf_text_hybrid",
@@ -831,21 +829,41 @@ def analyze_uploaded_plan(client, file_obj):
                         "pre_extracted": pre_data
                     }
 
-            # PDF exists, but no usable text was extracted
             return {
                 "mode": "pdf_no_text",
-                "raw": "PDF uploaded but no usable text was extracted.",
+                "raw": "PDF uploaded, but no usable text was extracted.",
                 "parsed": {},
+                "pre_extracted": {}
+            }
+
+        # -------------------------
+        # IMAGE PATH
+        # -------------------------
+        try:
+            raw, parsed = analyze_image_with_ai(client, file_bytes)
+
+            return {
+                "mode": "image",
+                "raw": raw,
+                "parsed": parsed or {},
                 "pre_extracted": {}
             }
 
         except Exception as e:
             return {
-                "mode": "pdf_error",
+                "mode": "image_error",
                 "raw": str(e),
                 "parsed": {},
                 "pre_extracted": {}
             }
+
+    except Exception as e:
+        return {
+            "mode": "plan_analysis_error",
+            "raw": str(e),
+            "parsed": {},
+            "pre_extracted": {}
+        }
 
     # =========================
     # IMAGE FALLBACK
