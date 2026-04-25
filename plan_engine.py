@@ -73,7 +73,16 @@ def find_number(patterns, text, flags=re.IGNORECASE):
     if raw is None:
         return None
     return safe_float(raw)
+    
+def get_pdf_page_count(file_bytes):
+    if not fitz:
+        return None
 
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        return len(doc)
+    except Exception:
+        return None
 
 def normalize_project_type(text):
     t = (text or "").lower()
@@ -825,12 +834,33 @@ def analyze_uploaded_plan(client, file_obj):
     file_bytes = file_obj.read()
     filename = getattr(file_obj, "filename", "").lower()
     is_pdf = filename.endswith(".pdf")
+file_size_mb = len(file_bytes) / (1024 * 1024)
 
+    if file_size_mb > 20:
+        return {
+            "mode": "file_too_large",
+            "raw": f"File is too large for live analysis ({round(file_size_mb, 1)} MB).",
+            "parsed": {
+                "notes": "Large plan sets should be processed with background jobs instead of live request analysis."
+            },
+            "pre_extracted": {}
+        }
     try:
         # -------------------------
         # PDF PATH
         # -------------------------
         if is_pdf:
+            page_count = get_pdf_page_count(file_bytes)
+
+            if page_count and page_count > 10:
+                return {
+                    "mode": "too_many_pages_live",
+                    "raw": f"PDF has {page_count} pages. Live analysis is limited to smaller plan files for now.",
+                    "parsed": {
+                        "notes": "This plan set is too large for live analysis. Future version should process this with a background job."
+                    },
+                    "pre_extracted": {}
+                }
             extracted_text = extract_pdf_text(file_bytes)
 
             # Text-based PDF path
