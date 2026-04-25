@@ -36,7 +36,29 @@ def extract_pdf_text(file_bytes):
         return "\n".join(text_parts)
     except Exception:
         return None
+        
+def render_pdf_page_to_png(file_bytes, page_number=0, zoom=2):
+    """
+    Render a PDF page to PNG bytes.
+    Used for scanned/image-based PDFs.
+    """
+    if not fitz:
+        return None
 
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+        if page_number >= len(doc):
+            return None
+
+        page = doc[page_number]
+        matrix = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=matrix, alpha=False)
+
+        return pix.tobytes("png")
+
+    except Exception:
+        return None
 
 def find_first(patterns, text, flags=re.IGNORECASE):
     for pattern in patterns:
