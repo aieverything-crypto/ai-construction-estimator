@@ -841,9 +841,33 @@ def analyze_uploaded_plan(client, file_obj):
                     raw, ai_parsed = analyze_pdf_text_with_ai(client, safe_text, pre_data)
                     merged = merge_plan_data(pre_data, ai_parsed)
 
+                    # Scanned PDF fallback: render first page as image
+                    page_image = render_pdf_page_to_png(file_bytes, page_number=0)
+
+                    if page_image:
+                        try:
+                            raw, parsed = analyze_image_with_ai(client, page_image)
+
+                            return {
+                                "mode": "pdf_image_page_1",
+                                "raw": raw,
+                                "parsed": parsed or {},
+                                "pre_extracted": {}
+                            }
+
+                        except Exception as e:
+                            return {
+                                "mode": "pdf_image_error",
+                                "raw": str(e),
+                                "parsed": {
+                                    "notes": "PDF had no readable text, and image-based analysis failed."
+                                },
+                                "pre_extracted": {}
+                            }
+
                     return {
                         "mode": "pdf_no_text",
-                        "raw": "This PDF appears to be scanned or image-based. Text extraction could not read it. Try uploading a clearer PDF or image screenshot.",
+                        "raw": "PDF uploaded, but no readable text could be extracted or rendered.",
                         "parsed": {
                             "notes": "No readable PDF text extracted. This may be a scanned plan."
                         },
