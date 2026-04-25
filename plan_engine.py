@@ -845,7 +845,7 @@ def analyze_uploaded_plan(client, file_obj):
                         "mode": "pdf_no_text",
                         "raw": "This PDF appears to be scanned or image-based. Text extraction could not read it. Try uploading a clearer PDF or image screenshot.",
                         "parsed": {
-                        "notes": "No readable PDF text extracted. This may be a scanned plan."
+                            "notes": "No readable PDF text extracted. This may be a scanned plan."
                         },
                         "pre_extracted": {}
                     }
