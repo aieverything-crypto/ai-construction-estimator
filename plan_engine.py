@@ -834,6 +834,17 @@ def analyze_uploaded_plan(client, file_obj):
     file_bytes = file_obj.read()
     filename = getattr(file_obj, "filename", "").lower()
     is_pdf = filename.endswith(".pdf")
+    is_image = filename.endswith((".png", ".jpg", ".jpeg", ".webp"))
+
+    if not is_pdf and not is_image:
+        return {
+            "mode": "unsupported_file_type",
+            "raw": f"Unsupported file type: {filename}",
+            "parsed": {
+                "notes": "Please upload a PDF, PNG, JPG, JPEG, or WEBP plan file."
+            },
+            "pre_extracted": {}
+        }
 
     # -------------------------
     # FILE SIZE GUARD
