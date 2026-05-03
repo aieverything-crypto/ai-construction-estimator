@@ -115,17 +115,26 @@ def process_plan_job(job_id, client, file_bytes, filename):
             return
 
         pages_to_process = min(total_pages, MAX_MVP_PAGES)
+        job["pages_target"] = pages_to_process
         page_results = []
 
         for page_index in range(pages_to_process):
             page_number = page_index + 1
+
+            job["current_page"] = page_number
+            job["current_step"] = "extracting page text"
+
             page_text = extract_page_text(file_bytes, page_index)
 
             if page_text and len(page_text.strip()) > 50:
+                job["current_step"] = "pre-extracting page data"
+
                 pre_data = pre_extract_plan_data(page_text)
                 pre_data = sanitize_plan_data(pre_data)
 
                 try:
+                    job["current_step"] = "running AI text analysis"
+                    
                     raw, ai_parsed = analyze_pdf_text_with_ai(
                         client=client,
                         extracted_text=page_text[:12000],
