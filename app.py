@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
+from plan_jobs import create_plan_job, get_plan_job, start_plan_job
 import os
 
 from cost_engine import (
@@ -81,7 +82,48 @@ def analyze_plan():
     except Exception as e:
         print("Plan analysis error:", e)
         return jsonify({"error": str(e)}), 500
+@app.route("/plan-jobs", methods=["POST"])
+def create_plan_job_route():
+    try:
+        if not client:
+            return jsonify({"error": "OpenAI not configured"}), 500
 
+        file = request.files.get("file")
+
+        if not file:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        filename = getattr(file, "filename", "uploaded_plan.pdf")
+        file_bytes = file.read()
+
+        job_id = create_plan_job(filename)
+
+        start_plan_job(
+            job_id=job_id,
+            client=client,
+            file_bytes=file_bytes,
+            filename=filename
+        )
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "queued",
+            "message": "Plan job created."
+        }), 202
+
+    except Exception as e:
+        print("Create plan job error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/plan-jobs/<job_id>", methods=["GET"])
+def get_plan_job_route(job_id):
+    job = get_plan_job(job_id)
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    return jsonify(job)
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
