@@ -163,6 +163,8 @@ def process_plan_job(job_id, client, file_bytes, filename):
 
             else:
                 try:
+                    job["current_step"] = "rendering scanned PDF page"
+
                     png_bytes = render_pdf_page_to_png(
                         file_bytes=file_bytes,
                         page_number=page_index,
@@ -181,6 +183,8 @@ def process_plan_job(job_id, client, file_bytes, filename):
                         })
 
                     else:
+                        job["current_step"] = "running AI image analysis"
+                        
                         raw, parsed = analyze_image_with_ai(client, png_bytes)
                         parsed = sanitize_plan_data(parsed or {})
 
@@ -210,6 +214,8 @@ def process_plan_job(job_id, client, file_bytes, filename):
 
         job["status"] = "complete"
         job["progress"] = 100
+        job["current_step"] = "complete"
+        job["current_page"] = None
         job["result"] = {
             "mode": "background_pdf_mvp",
             "pages_requested": total_pages,
