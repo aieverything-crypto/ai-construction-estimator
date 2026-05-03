@@ -81,7 +81,8 @@ def merge_page_results(page_results):
 
     merged["pages_analyzed"] = len(page_results)
     merged["notes"] = (
-        f"MVP background processing analyzed the first {len(page_results)} pages only."
+        f"Background processing analyzed the first {len(page_results)} pages in batches. "
+        "Full-plan processing can be enabled after testing stability."
     )
 
     return merged
