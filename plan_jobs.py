@@ -17,7 +17,7 @@ from plan_engine import (
 )
 
 PLAN_JOBS = {}
-MAX_MVP_PAGES = 15
+MAX_MVP_PAGES = 10
 BATCH_SIZE = 5
 
 
