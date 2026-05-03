@@ -33,6 +33,10 @@ def create_plan_job(filename):
         "total_pages": 0,
         "result": None,
         "error": None,
+        "current_page": None,
+        "current_step": "queued",
+        "pages_target": 0,
+        
     }
 
     return job_id
