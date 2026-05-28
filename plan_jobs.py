@@ -73,6 +73,63 @@ def extract_page_text(file_bytes, page_index):
     except Exception:
         return ""
 
+def build_contractor_plan_summary(parsed):
+    summary = []
+
+    project_type = parsed.get("project_type")
+    size = parsed.get("estimated_size_sqft")
+    stories = parsed.get("stories")
+    materials = parsed.get("materials_hint")
+    foundation = parsed.get("foundation_type")
+    roof = parsed.get("roof_type")
+
+    if project_type:
+        summary.append(f"Detected project type appears to be {project_type}.")
+
+    if size:
+        summary.append(f"Detected approximate project size is {int(round(size)):,} sqft.")
+
+    if stories:
+        summary.append(f"The plan appears to show a {stories}-story structure.")
+
+    if materials:
+        summary.append(f"Material clues include: {materials}.")
+
+    if foundation:
+        summary.append(f"Foundation condition appears to involve {foundation}.")
+
+    if roof:
+        summary.append(f"Roof type appears to be {roof}.")
+
+    scope = parsed.get("scope_of_work") or []
+    if scope:
+        summary.append("Detected scope items include " + ", ".join(scope[:8]) + ".")
+
+    risks = parsed.get("risk_flags") or []
+    site = parsed.get("site_constraints") or []
+    structural = parsed.get("structural_flags") or []
+
+    all_risks = risks + site + structural
+
+    if all_risks:
+        summary.append(
+            "Contractor should review these risk items closely: "
+            + ", ".join(all_risks[:8])
+            + "."
+        )
+
+    systems = parsed.get("mechanical_systems") or []
+    if systems:
+        summary.append(
+            "MEP/system coordination may be needed for: "
+            + ", ".join(systems[:8])
+            + "."
+        )
+
+    if not summary:
+        return "The uploaded plan was analyzed, but not enough reliable construction detail was detected to generate a strong contractor summary."
+
+    return " ".join(summary)
 
 def merge_page_results(page_results):
     merged = {}
@@ -84,6 +141,9 @@ def merge_page_results(page_results):
     merged = sanitize_plan_data(merged)
 
     merged["pages_analyzed"] = len(page_results)
+
+    merged["contractor_summary"] = build_contractor_plan_summary(merged)
+
     merged["notes"] = (
         f"Background processing analyzed the first {len(page_results)} pages in batches. "
         "Full-plan processing can be enabled after testing stability."
