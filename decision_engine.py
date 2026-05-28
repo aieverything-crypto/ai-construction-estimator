@@ -152,6 +152,6 @@ def build_flags(budget, cost, timeline_months, materials, description, size):
 def get_decision_color(decision):
     if decision in ["TAKE JOB", "HIGH VALUE", "STRONG BID"]:
         return "green"
-    if decision in ["NEGOTIATE", "CONSIDER"]:
+    if decision in ["NEGOTIATE", "CONSIDER", "NEEDS BUDGET"]:
         return "yellow"
     return "red"
