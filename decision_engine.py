@@ -17,7 +17,7 @@ def lead_score(size, budget, cost):
 
     # Budget logic (smarter + realistic)
     if not budget or budget <= 0:
-        score -= 3
+        return 5
     elif ratio < 0.5:
         score -= 4
     elif ratio < 0.75:
