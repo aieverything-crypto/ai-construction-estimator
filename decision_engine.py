@@ -43,11 +43,11 @@ def lead_score(size, budget, cost):
 
 
 def decision(total, budget):
-    if not budget or budget <= 0:
-        return "REJECT", "No valid budget"
-
     if not total or total <= 0:
         return "REJECT", "Invalid estimated cost"
+
+    if not budget or budget <= 0:
+        return "NEEDS BUDGET", "No client budget provided yet"
 
     ratio = budget / total
 
@@ -61,7 +61,6 @@ def decision(total, budget):
         return "HIGH RISK", "Significant budget gap"
     else:
         return "REJECT", "Budget is far below estimated cost"
-
 
 def risk_score(budget, cost, timeline_months, materials, description):
     risk = 4
