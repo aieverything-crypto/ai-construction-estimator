@@ -175,6 +175,74 @@ def build_page_insight(page_type, parsed):
 
     return f"{page_type} page contributed " + "; ".join(clues) + "."
 
+def build_plan_scores(parsed):
+    complexity = 3
+    site_risk = 2
+    mep_coordination = 2
+    confidence = 3
+
+    structural_flags = parsed.get("structural_flags") or []
+    site_constraints = parsed.get("site_constraints") or []
+    mechanical_systems = parsed.get("mechanical_systems") or []
+    risk_flags = parsed.get("risk_flags") or []
+    scope = parsed.get("scope_of_work") or []
+
+    if parsed.get("estimated_size_sqft"):
+        confidence += 2
+
+        if parsed["estimated_size_sqft"] > 3000:
+            complexity += 1
+        if parsed["estimated_size_sqft"] > 6000:
+            complexity += 2
+
+    if parsed.get("stories") and parsed["stories"] >= 2:
+        complexity += 1
+
+    if structural_flags:
+        complexity += min(len(structural_flags), 3)
+
+    if site_constraints:
+        site_risk += min(len(site_constraints), 4)
+
+    if risk_flags:
+        site_risk += min(len(risk_flags), 3)
+
+    if mechanical_systems:
+        mep_coordination += min(len(mechanical_systems), 4)
+
+    if len(scope) >= 5:
+        complexity += 1
+        confidence += 1
+
+    if parsed.get("materials_hint"):
+        confidence += 1
+
+    if parsed.get("foundation_type"):
+        confidence += 1
+
+    if parsed.get("roof_type"):
+        confidence += 1
+
+    complexity = max(1, min(10, complexity))
+    site_risk = max(1, min(10, site_risk))
+    mep_coordination = max(1, min(10, mep_coordination))
+    confidence_num = max(1, min(10, confidence))
+
+    if confidence_num >= 8:
+        confidence_label = "High"
+    elif confidence_num >= 5:
+        confidence_label = "Medium"
+    else:
+        confidence_label = "Low"
+
+    return {
+        "complexity_score": complexity,
+        "site_risk_score": site_risk,
+        "mep_coordination_score": mep_coordination,
+        "estimate_confidence_score": confidence_num,
+        "estimate_confidence": confidence_label
+    }
+
 def merge_page_results(page_results):
     merged = {}
 
@@ -187,6 +255,7 @@ def merge_page_results(page_results):
     merged["pages_analyzed"] = len(page_results)
 
     merged["contractor_summary"] = build_contractor_plan_summary(merged)
+    merged["plan_scores"] = build_plan_scores(merged)
 
     sheet_types = {}
     page_insights = []
