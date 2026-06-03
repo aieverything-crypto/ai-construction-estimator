@@ -249,7 +249,7 @@ def build_page_insight(page_type, parsed):
 
     if (
         parsed.get("project_type")
-        and page_type in ["cover_sheet", "floor_plan", "site_civil"]
+        and page_type == "cover_sheet"
         and is_valid_project_type(parsed.get("project_type"))
     ):
         clues.append(f"project type: {parsed.get('project_type')}")
