@@ -243,12 +243,157 @@ def build_plan_scores(parsed):
         "estimate_confidence": confidence_label
     }
 
+import re
+
+def extract_drawing_index_from_text(text):
+    """
+    Attempts to extract drawing/sheet index rows from plan text.
+    Returns a list of sheets like:
+    [{"sheet": "A1.0", "title": "Floor Plan", "discipline": "architectural"}]
+    """
+    if not text:
+        return []
+
+    lines = text.splitlines()
+    sheets = []
+
+    sheet_pattern = re.compile(
+        r"\b([A-Z]{1,3}\d+(?:\.\d+)?(?:[A-Z])?)\b[\s\-:]+(.{3,80})",
+        re.IGNORECASE
+    )
+
+    for line in lines:
+        clean = " ".join(line.strip().split())
+
+        if not clean:
+            continue
+
+        match = sheet_pattern.search(clean)
+
+        if not match:
+            continue
+
+        sheet = match.group(1).upper()
+        title = match.group(2).strip()
+
+        # avoid junk matches
+        if len(title) < 3:
+            continue
+
+        discipline = classify_sheet_discipline(sheet, title)
+
+        sheets.append({
+            "sheet": sheet,
+            "title": title,
+            "discipline": discipline
+        })
+
+    # de-dupe
+    deduped = []
+    seen = set()
+
+    for item in sheets:
+        key = item["sheet"]
+        if key not in seen:
+            seen.add(key)
+            deduped.append(item)
+
+    return deduped
+
+
+def classify_sheet_discipline(sheet, title):
+    text = f"{sheet} {title}".lower()
+
+    if sheet.startswith("A") or any(x in text for x in ["floor plan", "elevation", "section", "architectural"]):
+        return "architectural"
+
+    if sheet.startswith("S") or any(x in text for x in ["structural", "foundation", "framing", "shear", "beam"]):
+        return "structural"
+
+    if sheet.startswith("M") or any(x in text for x in ["mechanical", "hvac", "duct", "heat pump"]):
+        return "mechanical"
+
+    if sheet.startswith("E") or any(x in text for x in ["electrical", "lighting", "power", "panel"]):
+        return "electrical"
+
+    if sheet.startswith("P") or any(x in text for x in ["plumbing", "water", "sewer", "gas"]):
+        return "plumbing"
+
+    if sheet.startswith("C") or any(x in text for x in ["civil", "grading", "drainage", "erosion", "site"]):
+        return "civil"
+
+    if sheet.startswith("T") or any(x in text for x in ["title", "cover", "index", "general notes"]):
+        return "title"
+
+    return "unknown"
+
+def rank_contractor_relevant_sheets(sheet_index):
+    """
+    Ranks sheets by usefulness for early contractor estimating/review.
+    """
+    ranked = []
+
+    priority_keywords = {
+        "floor plan": 10,
+        "site plan": 9,
+        "foundation": 9,
+        "structural": 8,
+        "framing": 8,
+        "roof": 7,
+        "mechanical": 7,
+        "electrical": 7,
+        "plumbing": 7,
+        "elevation": 5,
+        "section": 5,
+        "schedule": 4,
+        "detail": 3,
+        "notes": 2,
+        "cover": 2,
+        "index": 2
+    }
+
+    discipline_bonus = {
+        "architectural": 8,
+        "structural": 8,
+        "civil": 7,
+        "mechanical": 6,
+        "electrical": 6,
+        "plumbing": 6,
+        "title": 2,
+        "unknown": 1
+    }
+
+    for sheet in sheet_index:
+        title = (sheet.get("title") or "").lower()
+        discipline = sheet.get("discipline", "unknown")
+
+        score = discipline_bonus.get(discipline, 1)
+
+        for keyword, value in priority_keywords.items():
+            if keyword in title:
+                score += value
+
+        ranked.append({
+            **sheet,
+            "contractor_priority_score": min(score, 20)
+        })
+
+    ranked.sort(key=lambda x: x["contractor_priority_score"], reverse=True)
+    return ranked
+
 def merge_page_results(page_results):
     merged = {}
+    drawing_index = []
 
     for page_result in page_results:
         parsed = page_result.get("parsed") or {}
         merged = merge_plan_data(merged, parsed)
+
+        raw_text = page_result.get("raw") or ""
+        possible_index = extract_drawing_index_from_text(raw_text)
+
+        if possible_index:
+            drawing_index.extend(possible_index)
 
     merged = sanitize_plan_data(merged)
 
@@ -275,6 +420,20 @@ def merge_page_results(page_results):
 
     merged["sheet_type_summary"] = sheet_types
     merged["page_insights"] = page_insights
+
+    if drawing_index:
+    # de-dupe again across pages
+    seen = set()
+    clean_index = []
+
+    for item in drawing_index:
+        key = item.get("sheet")
+        if key and key not in seen:
+            seen.add(key)
+            clean_index.append(item)
+
+    merged["drawing_index"] = clean_index
+    merged["contractor_priority_sheets"] = rank_contractor_relevant_sheets(clean_index)[:12]
 
     merged["notes"] = (
         f"Background processing analyzed the first {len(page_results)} pages in batches. "
