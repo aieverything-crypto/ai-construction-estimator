@@ -267,6 +267,7 @@ def merge_page_results(page_results):
         page_insights.append({
             "page": page.get("page"),
             "page_type": page_type,
+            "page_tags": page.get("page_tags", []),
             "mode": page.get("mode"),
             "insight": build_page_insight(page_type, page.get("parsed") or {})
         })
@@ -316,6 +317,32 @@ def classify_plan_page(text):
 
     return "unknown"
 
+def classify_plan_page_tags(text):
+    t = (text or "").lower()
+    tags = []
+
+    tag_rules = {
+        "cover_sheet": ["cover sheet", "project data", "sheet index", "general notes"],
+        "site_civil": ["site plan", "grading", "drainage", "erosion", "setback", "lot area"],
+        "floor_plan": ["floor plan", "bedroom", "bathroom", "kitchen", "living room"],
+        "foundation": ["foundation plan", "footing", "slab", "crawlspace", "basement"],
+        "structural": ["structural", "shear wall", "beam", "joist", "rafter", "holdown"],
+        "roof_plan": ["roof plan", "roofing", "ridge", "gable", "standing seam"],
+        "mechanical": ["mechanical", "hvac", "heat pump", "air handler", "duct"],
+        "electrical": ["electrical", "panel", "lighting", "receptacle", "service"],
+        "plumbing": ["plumbing", "water heater", "fixture", "sewer", "drain"],
+        "details": ["detail", "section", "schedule"]
+    }
+
+    for tag, keywords in tag_rules.items():
+        if any(keyword in t for keyword in keywords):
+            tags.append(tag)
+
+    if not tags:
+        tags.append("unknown")
+
+    return tags
+
 def process_plan_job(job_id, client, file_bytes, filename):
     job = PLAN_JOBS[job_id]
 
@@ -350,6 +377,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
 
             page_text = extract_page_text(file_bytes, page_index)
             page_type = classify_plan_page(page_text)
+            page_tags = classify_plan_page_tags(page_text)
             job["current_step"] = f"classified page as {page_type}"
 
             if page_text and len(page_text.strip()) > 50:
@@ -373,6 +401,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                     page_results.append({
                         "page": page_number,
                         "page_type": page_type,
+                        "page_tags": page_tags,
                         "mode": "page_text_hybrid",
                         "raw": raw,
                         "parsed": merged,
@@ -383,6 +412,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                     page_results.append({
                         "page": page_number,
                         "page_type": page_type,
+                        "page_tags": page_tags,
                         "mode": "page_text_preextract_only",
                         "raw": str(e),
                         "parsed": pre_data,
@@ -403,6 +433,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                         page_results.append({
                             "page": page_number,
                             "page_type": page_type,
+                            "page_tags": page_tags,
                             "mode": "page_no_text",
                             "raw": "No readable text and page image render failed.",
                             "parsed": {
@@ -420,6 +451,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                         page_results.append({
                             "page": page_number,
                             "page_type": page_type,
+                            "page_tags": page_tags,
                             "mode": "page_image",
                             "raw": raw,
                             "parsed": parsed,
@@ -430,6 +462,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                     page_results.append({
                         "page": page_number,
                         "page_type": page_type,
+                        "page_tags": page_tags,
                         "mode": "page_image_error",
                         "raw": str(e),
                         "parsed": {
