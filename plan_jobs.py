@@ -1,6 +1,7 @@
 import uuid
 import threading
 import traceback
+from collections import Counter
 
 try:
     import fitz
@@ -20,6 +21,89 @@ PLAN_JOBS = {}
 MAX_MVP_PAGES = 100
 BATCH_SIZE = 5
 
+GLOBAL_FACT_VOTE_FIELDS = [
+    "project_type",
+    "estimated_size_sqft",
+    "stories",
+    "bedrooms",
+    "bathrooms",
+    "foundation_type",
+    "roof_type",
+    "materials_hint"
+]
+
+
+def normalize_vote_value(value):
+    if value in (None, "", [], {}):
+        return None
+
+    if isinstance(value, float):
+        return round(value)
+
+    if isinstance(value, int):
+        return value
+
+    return str(value).strip()
+
+
+def vote_global_facts(page_results):
+    votes = {field: Counter() for field in GLOBAL_FACT_VOTE_FIELDS}
+    source_pages = {field: {} for field in GLOBAL_FACT_VOTE_FIELDS}
+
+    for page in page_results:
+        parsed = page.get("parsed") or {}
+        page_type = page.get("page_type", "unknown")
+        page_tags = page.get("page_tags", [])
+        page_number = page.get("page")
+
+        trusted = is_trusted_for_global_facts(page_type, page_tags)
+
+        if not trusted:
+            continue
+
+        for field in GLOBAL_FACT_VOTE_FIELDS:
+            value = normalize_vote_value(parsed.get(field))
+
+            if value is None:
+                continue
+
+            weight = 1
+
+            if page_type == "cover_sheet":
+                weight = 3
+            elif page_type == "floor_plan":
+                weight = 2
+            elif page_type == "site_civil":
+                weight = 2
+
+            votes[field][value] += weight
+
+            if value not in source_pages[field]:
+                source_pages[field][value] = []
+
+            source_pages[field][value].append(page_number)
+
+    final_facts = {}
+    confidence = {}
+
+    for field, counter in votes.items():
+        if not counter:
+            continue
+
+        winner, winner_votes = counter.most_common(1)[0]
+        total_votes = sum(counter.values())
+
+        final_facts[field] = winner
+
+        confidence[field] = {
+            "value": winner,
+            "confidence_percent": round((winner_votes / total_votes) * 100),
+            "votes": winner_votes,
+            "total_votes": total_votes,
+            "source_pages": source_pages[field].get(winner, [])
+        }
+
+    return final_facts, confidence
 
 def create_plan_job(filename):
     job_id = str(uuid.uuid4())
@@ -464,6 +548,13 @@ def merge_page_results(page_results):
         if possible_index:
             drawing_index.extend(possible_index)
 
+    voted_facts, global_fact_confidence = vote_global_facts(page_results)
+
+    for key, value in voted_facts.items():
+        merged[key] = value
+
+    merged["global_fact_confidence"] = global_fact_confidence
+    
     merged = sanitize_plan_data(merged)
 
     merged["pages_analyzed"] = len(page_results)
