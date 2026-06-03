@@ -134,13 +134,13 @@ def build_contractor_plan_summary(parsed):
 def build_page_insight(page_type, parsed):
     clues = []
 
-    if parsed.get("project_type"):
+    if parsed.get("project_type") and page_type in ["cover_sheet", "floor_plan", "site_civil"]:
         clues.append(f"project type: {parsed.get('project_type')}")
 
-    if parsed.get("estimated_size_sqft"):
+    if parsed.get("estimated_size_sqft") and page_type in ["cover_sheet", "floor_plan", "site_civil"]:
         clues.append(f"size: {int(round(parsed.get('estimated_size_sqft'))):,} sqft")
 
-    if parsed.get("stories"):
+    if parsed.get("stories") and page_type in ["cover_sheet", "floor_plan", "site_civil"]:
         clues.append(f"stories: {parsed.get('stories')}")
 
     if parsed.get("bedrooms"):
@@ -380,6 +380,66 @@ def rank_contractor_relevant_sheets(sheet_index):
 
     ranked.sort(key=lambda x: x["contractor_priority_score"], reverse=True)
     return ranked
+    
+GLOBAL_FACT_FIELDS = [
+    "project_type",
+    "estimated_size_sqft",
+    "stories",
+    "bedrooms",
+    "bathrooms",
+    "location_data",
+    "construction_type",
+    "occupancy_class"
+]
+
+GLOBAL_TRUSTED_PAGE_TYPES = [
+    "cover_sheet",
+    "floor_plan",
+    "site_civil"
+]
+
+LOCAL_DETAIL_PAGE_TYPES = [
+    "structural",
+    "mechanical",
+    "electrical",
+    "plumbing",
+    "details",
+    "foundation",
+    "roof_plan",
+    "unknown"
+]
+
+
+def is_trusted_for_global_facts(page_type, page_tags):
+    if page_type in GLOBAL_TRUSTED_PAGE_TYPES:
+        return True
+
+    tags = page_tags or []
+
+    if "cover_sheet" in tags or "floor_plan" in tags or "site_civil" in tags:
+        return True
+
+    return False
+
+
+def strip_global_facts_from_local_page(parsed, page_type, page_tags):
+    """
+    Prevents detail sheets from overriding whole-project facts.
+    Example: module connection page should not change project_type to modular construction.
+    """
+    if not isinstance(parsed, dict):
+        return {}
+
+    if is_trusted_for_global_facts(page_type, page_tags):
+        return parsed
+
+    cleaned = dict(parsed)
+
+    for field in GLOBAL_FACT_FIELDS:
+        if field in cleaned:
+            cleaned.pop(field, None)
+
+    return cleaned
 
 def merge_page_results(page_results):
     merged = {}
@@ -387,7 +447,16 @@ def merge_page_results(page_results):
 
     for page_result in page_results:
         parsed = page_result.get("parsed") or {}
-        merged = merge_plan_data(merged, parsed)
+        page_type = page_result.get("page_type", "unknown")
+        page_tags = page_result.get("page_tags", [])
+
+        cleaned_parsed = strip_global_facts_from_local_page(
+            parsed=parsed,
+            page_type=page_type,
+            page_tags=page_tags
+        )
+
+        merged = merge_plan_data(merged, cleaned_parsed)
 
         raw_text = page_result.get("raw") or ""
         possible_index = extract_drawing_index_from_text(raw_text)
