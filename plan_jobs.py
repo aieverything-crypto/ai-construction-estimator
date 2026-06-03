@@ -70,10 +70,18 @@ def vote_global_facts(page_results):
             weight = 1
 
             if page_type == "cover_sheet":
-                weight = 3
+                weight = 5
+
             elif page_type == "floor_plan":
-                weight = 2
+                weight = 3
+
             elif page_type == "site_civil":
+                weight = 3
+
+            elif page_type == "foundation":
+                weight = 2
+
+            elif page_type == "roof_plan":
                 weight = 2
 
             votes[field][value] += weight
@@ -214,11 +222,36 @@ def build_contractor_plan_summary(parsed):
         return "The uploaded plan was analyzed, but not enough reliable construction detail was detected to generate a strong contractor summary."
 
     return " ".join(summary)
-    
+
+def is_valid_project_type(value):
+    if not value:
+        return False
+
+    value = str(value).lower().strip()
+
+    invalid = [
+        "structural",
+        "mechanical",
+        "electrical",
+        "plumbing",
+        "foundation",
+        "roofing",
+        "roof",
+        "civil",
+        "details",
+        "modular construction"
+    ]
+
+    return value not in invalid
+
 def build_page_insight(page_type, parsed):
     clues = []
 
-    if parsed.get("project_type") and page_type in ["cover_sheet", "floor_plan", "site_civil"]:
+    if (
+        parsed.get("project_type")
+        and page_type in ["cover_sheet", "floor_plan", "site_civil"]
+        and is_valid_project_type(parsed.get("project_type"))
+    ):
         clues.append(f"project type: {parsed.get('project_type')}")
 
     if parsed.get("estimated_size_sqft") and page_type in ["cover_sheet", "floor_plan", "site_civil"]:
