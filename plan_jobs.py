@@ -268,6 +268,7 @@ def merge_page_results(page_results):
             "page": page.get("page"),
             "page_type": page_type,
             "page_tags": page.get("page_tags", []),
+            "page_importance": page.get("page_importance", 1),
             "mode": page.get("mode"),
             "insight": build_page_insight(page_type, page.get("parsed") or {})
         })
@@ -343,6 +344,28 @@ def classify_plan_page_tags(text):
 
     return tags
 
+def score_page_importance(page_type, page_tags):
+    score = 3
+
+    high_value = ["cover_sheet", "site_civil", "floor_plan", "foundation"]
+    medium_value = ["structural", "roof_plan", "mechanical", "electrical", "plumbing"]
+    low_value = ["details", "unknown"]
+
+    if page_type in high_value:
+        score += 3
+    elif page_type in medium_value:
+        score += 2
+    elif page_type in low_value:
+        score -= 1
+
+    for tag in page_tags or []:
+        if tag in high_value:
+            score += 1
+        elif tag in medium_value:
+            score += 1
+
+    return max(1, min(10, score))
+
 def process_plan_job(job_id, client, file_bytes, filename):
     job = PLAN_JOBS[job_id]
 
@@ -378,6 +401,8 @@ def process_plan_job(job_id, client, file_bytes, filename):
             page_text = extract_page_text(file_bytes, page_index)
             page_type = classify_plan_page(page_text)
             page_tags = classify_plan_page_tags(page_text)
+            page_importance = score_page_importance(page_type, page_tags)
+
             job["current_step"] = f"classified page as {page_type}"
 
             if page_text and len(page_text.strip()) > 50:
@@ -402,6 +427,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                         "page": page_number,
                         "page_type": page_type,
                         "page_tags": page_tags,
+                        "page_importance": page_importance,
                         "mode": "page_text_hybrid",
                         "raw": raw,
                         "parsed": merged,
@@ -413,6 +439,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                         "page": page_number,
                         "page_type": page_type,
                         "page_tags": page_tags,
+                        "page_importance": page_importance,
                         "mode": "page_text_preextract_only",
                         "raw": str(e),
                         "parsed": pre_data,
@@ -434,6 +461,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                             "page": page_number,
                             "page_type": page_type,
                             "page_tags": page_tags,
+                            "page_importance": page_importance,
                             "mode": "page_no_text",
                             "raw": "No readable text and page image render failed.",
                             "parsed": {
@@ -452,6 +480,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                             "page": page_number,
                             "page_type": page_type,
                             "page_tags": page_tags,
+                            "page_importance": page_importance,
                             "mode": "page_image",
                             "raw": raw,
                             "parsed": parsed,
@@ -463,6 +492,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                         "page": page_number,
                         "page_type": page_type,
                         "page_tags": page_tags,
+                        "page_importance": page_importance,
                         "mode": "page_image_error",
                         "raw": str(e),
                         "parsed": {
