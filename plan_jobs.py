@@ -203,7 +203,7 @@ def merge_page_results(page_results):
         })
 
     merged["sheet_type_summary"] = sheet_types
-    merged["page_insights"] = page_insightss
+    merged["page_insights"] = page_insights
 
     merged["notes"] = (
         f"Background processing analyzed the first {len(page_results)} pages in batches. "
