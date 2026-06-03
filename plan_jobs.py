@@ -144,6 +144,14 @@ def merge_page_results(page_results):
 
     merged["contractor_summary"] = build_contractor_plan_summary(merged)
 
+    sheet_types = {}
+
+    for page in page_results:
+        page_type = page.get("page_type", "unknown")
+        sheet_types[page_type] = sheet_types.get(page_type, 0) + 1
+
+    merged["sheet_type_summary"] = sheet_types
+
     merged["notes"] = (
         f"Background processing analyzed the first {len(page_results)} pages in batches. "
         "Full-plan processing can be enabled after testing stability."
@@ -151,6 +159,40 @@ def merge_page_results(page_results):
 
     return merged
 
+def classify_plan_page(text):
+    t = (text or "").lower()
+
+    if any(x in t for x in ["cover sheet", "project data", "sheet index", "general notes"]):
+        return "cover_sheet"
+
+    if any(x in t for x in ["site plan", "grading", "drainage", "erosion", "setback", "lot area"]):
+        return "site_civil"
+
+    if any(x in t for x in ["floor plan", "bedroom", "bathroom", "kitchen", "living room"]):
+        return "floor_plan"
+
+    if any(x in t for x in ["foundation plan", "footing", "slab", "crawlspace", "basement"]):
+        return "foundation"
+
+    if any(x in t for x in ["structural", "shear wall", "beam", "joist", "rafter", "holdown"]):
+        return "structural"
+
+    if any(x in t for x in ["roof plan", "roofing", "ridge", "gable", "standing seam"]):
+        return "roof_plan"
+
+    if any(x in t for x in ["mechanical", "hvac", "heat pump", "air handler", "duct"]):
+        return "mechanical"
+
+    if any(x in t for x in ["electrical", "panel", "lighting", "receptacle", "service"]):
+        return "electrical"
+
+    if any(x in t for x in ["plumbing", "water heater", "fixture", "sewer", "drain"]):
+        return "plumbing"
+
+    if any(x in t for x in ["detail", "section", "schedule"]):
+        return "details"
+
+    return "unknown"
 
 def process_plan_job(job_id, client, file_bytes, filename):
     job = PLAN_JOBS[job_id]
@@ -185,6 +227,8 @@ def process_plan_job(job_id, client, file_bytes, filename):
             job["current_step"] = "extracting page text"
 
             page_text = extract_page_text(file_bytes, page_index)
+            page_type = classify_plan_page(page_text)
+            job["current_step"] = f"classified page as {page_type}"
 
             if page_text and len(page_text.strip()) > 50:
                 job["current_step"] = "pre-extracting page data"
@@ -206,6 +250,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
 
                     page_results.append({
                         "page": page_number,
+                        "page_type": page_type,
                         "mode": "page_text_hybrid",
                         "raw": raw,
                         "parsed": merged,
@@ -215,6 +260,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                 except Exception as e:
                     page_results.append({
                         "page": page_number,
+                        "page_type": page_type,
                         "mode": "page_text_preextract_only",
                         "raw": str(e),
                         "parsed": pre_data,
@@ -234,6 +280,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                     if not png_bytes:
                         page_results.append({
                             "page": page_number,
+                            "page_type": page_type,
                             "mode": "page_no_text",
                             "raw": "No readable text and page image render failed.",
                             "parsed": {
@@ -250,6 +297,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
 
                         page_results.append({
                             "page": page_number,
+                            "page_type": page_type,
                             "mode": "page_image",
                             "raw": raw,
                             "parsed": parsed,
@@ -259,6 +307,7 @@ def process_plan_job(job_id, client, file_bytes, filename):
                 except Exception as e:
                     page_results.append({
                         "page": page_number,
+                        "page_type": page_type,
                         "mode": "page_image_error",
                         "raw": str(e),
                         "parsed": {
