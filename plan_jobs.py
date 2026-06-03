@@ -130,6 +130,50 @@ def build_contractor_plan_summary(parsed):
         return "The uploaded plan was analyzed, but not enough reliable construction detail was detected to generate a strong contractor summary."
 
     return " ".join(summary)
+    
+def build_page_insight(page_type, parsed):
+    clues = []
+
+    if parsed.get("project_type"):
+        clues.append(f"project type: {parsed.get('project_type')}")
+
+    if parsed.get("estimated_size_sqft"):
+        clues.append(f"size: {int(round(parsed.get('estimated_size_sqft'))):,} sqft")
+
+    if parsed.get("stories"):
+        clues.append(f"stories: {parsed.get('stories')}")
+
+    if parsed.get("bedrooms"):
+        clues.append(f"bedrooms: {parsed.get('bedrooms')}")
+
+    if parsed.get("bathrooms"):
+        clues.append(f"bathrooms: {parsed.get('bathrooms')}")
+
+    if parsed.get("foundation_type"):
+        clues.append(f"foundation: {parsed.get('foundation_type')}")
+
+    if parsed.get("roof_type"):
+        clues.append(f"roof: {parsed.get('roof_type')}")
+
+    if parsed.get("materials_hint"):
+        clues.append(f"materials: {parsed.get('materials_hint')}")
+
+    scope = parsed.get("scope_of_work") or []
+    if scope:
+        clues.append("scope: " + ", ".join(scope[:5]))
+
+    risks = parsed.get("risk_flags") or []
+    if risks:
+        clues.append("risks: " + ", ".join(risks[:5]))
+
+    systems = parsed.get("mechanical_systems") or []
+    if systems:
+        clues.append("systems: " + ", ".join(systems[:5]))
+
+    if not clues:
+        return f"{page_type} page analyzed, but no strong structured clues were detected."
+
+    return f"{page_type} page contributed " + "; ".join(clues) + "."
 
 def merge_page_results(page_results):
     merged = {}
@@ -145,12 +189,21 @@ def merge_page_results(page_results):
     merged["contractor_summary"] = build_contractor_plan_summary(merged)
 
     sheet_types = {}
+    page_insights = []
 
     for page in page_results:
         page_type = page.get("page_type", "unknown")
         sheet_types[page_type] = sheet_types.get(page_type, 0) + 1
 
+        page_insights.append({
+            "page": page.get("page"),
+            "page_type": page_type,
+            "mode": page.get("mode"),
+            "insight": build_page_insight(page_type, page.get("parsed") or {})
+        })
+
     merged["sheet_type_summary"] = sheet_types
+    merged["page_insights"] = page_insightss
 
     merged["notes"] = (
         f"Background processing analyzed the first {len(page_results)} pages in batches. "
