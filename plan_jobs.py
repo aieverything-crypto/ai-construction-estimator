@@ -422,18 +422,18 @@ def merge_page_results(page_results):
     merged["page_insights"] = page_insights
 
     if drawing_index:
-    # de-dupe again across pages
-    seen = set()
-    clean_index = []
+        # de-dupe again across pages
+        seen = set()
+        clean_index = []
 
-    for item in drawing_index:
-        key = item.get("sheet")
-        if key and key not in seen:
-            seen.add(key)
-            clean_index.append(item)
+        for item in drawing_index:
+            key = item.get("sheet")
+            if key and key not in seen:
+                seen.add(key)
+                clean_index.append(item)
 
-    merged["drawing_index"] = clean_index
-    merged["contractor_priority_sheets"] = rank_contractor_relevant_sheets(clean_index)[:12]
+        merged["drawing_index"] = clean_index
+        merged["contractor_priority_sheets"] = rank_contractor_relevant_sheets(clean_index)[:12]
 
     merged["notes"] = (
         f"Background processing analyzed the first {len(page_results)} pages in batches. "
