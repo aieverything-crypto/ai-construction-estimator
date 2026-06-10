@@ -53,9 +53,10 @@ def vote_global_facts(page_results):
     for page in page_results:
         parsed = page.get("parsed") or {}
         page_type = page.get("page_type", "unknown")
-        parsed = apply_field_page_type_gate(parsed, page_type)
         page_tags = page.get("page_tags", [])
         page_number = page.get("page")
+
+        parsed = apply_field_page_type_gate(parsed, page_type)
 
         trusted = is_trusted_for_global_facts(page_type, page_tags)
 
@@ -562,13 +563,26 @@ def is_legend_or_reference_page(page_text):
     
 FIELD_ALLOWED_PAGE_TYPES = {
     "project_type": ["cover_sheet", "floor_plan", "site_civil"],
+
     "estimated_size_sqft": ["cover_sheet", "floor_plan", "site_civil"],
+
     "stories": ["cover_sheet", "floor_plan", "site_civil"],
+
     "bedrooms": ["cover_sheet", "floor_plan"],
+
     "bathrooms": ["cover_sheet", "floor_plan"],
-    "foundation_type": ["cover_sheet", "floor_plan", "foundation", "structural"],
+
+    "foundation_type": ["cover_sheet", "floor_plan", "foundation"],
+
     "roof_type": ["cover_sheet", "floor_plan", "roof_plan"],
-    "materials_hint": ["cover_sheet", "floor_plan", "foundation", "structural", "roof_plan"],
+
+    "materials_hint": [
+        "cover_sheet",
+        "floor_plan",
+        "foundation",
+        "structural",
+        "roof_plan"
+    ],
 }
 
 
@@ -664,7 +678,10 @@ def merge_page_results(page_results):
             "page_tags": page.get("page_tags", []),
             "page_importance": page.get("page_importance", 1),
             "mode": page.get("mode"),
-            "insight": build_page_insight(page_type, page.get("parsed") or {})
+            "insight": build_page_insight(
+                page_type,
+                apply_field_page_type_gate(page.get("parsed") or {}, page_type)
+            )
         })
 
     merged["sheet_type_summary"] = sheet_types
