@@ -664,6 +664,28 @@ def build_ai_prompt(extracted_text, pre_data):
     return f"""
 Analyze this construction plan text and return ONLY valid JSON.
 
+CRITICAL EXTRACTION RULES:
+
+- Only extract project_type, bedrooms, bathrooms, stories, square footage,
+  roof type, foundation type, materials, and occupancy if they are explicitly
+  stated on the page.
+
+- Do NOT infer global project facts from legends, symbol sheets,
+  material legends, abbreviations, schedules, details, notes,
+  reference diagrams, example room labels, or example door/window tags.
+
+- Ignore example room references such as:
+  GARAGE G101 320 SF
+
+- Ignore material legends when determining project materials.
+
+- Ignore symbol legends when determining project size,
+  project type, bedrooms, bathrooms, stories, or systems.
+
+- If a page appears to be a legend sheet, return null for global project facts.
+
+- If a value is uncertain, return null instead of guessing.
+
 Use the pre-extracted fields below as strong hints, but correct them if the plan text clearly proves something else.
 Prefer explicit values from the document over guesses.
 
