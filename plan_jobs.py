@@ -53,6 +53,7 @@ def vote_global_facts(page_results):
     for page in page_results:
         parsed = page.get("parsed") or {}
         page_type = page.get("page_type", "unknown")
+        parsed = apply_field_page_type_gate(parsed, page_type)
         page_tags = page.get("page_tags", [])
         page_number = page.get("page")
 
@@ -558,7 +559,31 @@ def is_legend_or_reference_page(page_text):
     ]
 
     return any(signal in t for signal in legend_signals)
+    
+FIELD_ALLOWED_PAGE_TYPES = {
+    "project_type": ["cover_sheet", "floor_plan", "site_civil"],
+    "estimated_size_sqft": ["cover_sheet", "floor_plan", "site_civil"],
+    "stories": ["cover_sheet", "floor_plan", "site_civil"],
+    "bedrooms": ["cover_sheet", "floor_plan"],
+    "bathrooms": ["cover_sheet", "floor_plan"],
+    "foundation_type": ["cover_sheet", "floor_plan", "foundation", "structural"],
+    "roof_type": ["cover_sheet", "floor_plan", "roof_plan"],
+    "materials_hint": ["cover_sheet", "floor_plan", "foundation", "structural", "roof_plan"],
+}
 
+
+def apply_field_page_type_gate(parsed, page_type):
+    if not isinstance(parsed, dict):
+        return {}
+
+    cleaned = dict(parsed)
+
+    for field, allowed_types in FIELD_ALLOWED_PAGE_TYPES.items():
+        if field in cleaned and page_type not in allowed_types:
+            cleaned.pop(field, None)
+
+    return cleaned
+    
 def strip_global_facts_from_local_page(parsed, page_type, page_tags, page_text=""):
     """
     Prevents detail, legend, notes, and reference sheets from overriding whole-project facts.
@@ -601,6 +626,8 @@ def merge_page_results(page_results):
             page_tags=page_tags,
             page_text=raw_text
         )
+
+        cleaned_parsed = apply_field_page_type_gate(cleaned_parsed, page_type)
 
         merged = merge_plan_data(merged, cleaned_parsed)
 
