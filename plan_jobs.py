@@ -63,6 +63,12 @@ def vote_global_facts(page_results):
 
         for field in GLOBAL_FACT_VOTE_FIELDS:
             value = normalize_vote_value(parsed.get(field))
+            if field == "estimated_size_sqft" and value is not None:
+                try:
+                    if float(value) < 500:
+                        continue
+                except Exception:
+                    continue
 
             if value is None:
                 continue
@@ -538,23 +544,43 @@ def is_trusted_for_global_facts(page_type, page_tags):
 
     return False
 
+def is_legend_or_reference_page(page_text):
+    t = (page_text or "").lower()
 
-def strip_global_facts_from_local_page(parsed, page_type, page_tags):
+    legend_signals = [
+        "symbols legend",
+        "materials legend",
+        "abbreviations",
+        "room reference",
+        "door reference",
+        "window / skylight reference",
+        "general notes"
+    ]
+
+    return any(signal in t for signal in legend_signals)
+
+def strip_global_facts_from_local_page(parsed, page_type, page_tags, page_text=""):
     """
-    Prevents detail sheets from overriding whole-project facts.
-    Example: module connection page should not change project_type to modular construction.
+    Prevents detail, legend, notes, and reference sheets from overriding whole-project facts.
+    Example: room reference 'Garage 320 SF' should not become total project size.
     """
     if not isinstance(parsed, dict):
         return {}
 
-    if is_trusted_for_global_facts(page_type, page_tags):
-        return parsed
-
     cleaned = dict(parsed)
 
-    for field in GLOBAL_FACT_FIELDS:
-        if field in cleaned:
+    # Never trust legend/reference sheets for global project facts
+    if is_legend_or_reference_page(page_text):
+        for field in GLOBAL_FACT_FIELDS:
             cleaned.pop(field, None)
+        return cleaned
+
+    # Only trusted sheets can keep global facts
+    if is_trusted_for_global_facts(page_type, page_tags):
+        return cleaned
+
+    for field in GLOBAL_FACT_FIELDS:
+        cleaned.pop(field, None)
 
     return cleaned
 
@@ -567,15 +593,18 @@ def merge_page_results(page_results):
         page_type = page_result.get("page_type", "unknown")
         page_tags = page_result.get("page_tags", [])
 
+        raw_text = page_result.get("raw") or ""
+
         cleaned_parsed = strip_global_facts_from_local_page(
             parsed=parsed,
             page_type=page_type,
-            page_tags=page_tags
+            page_tags=page_tags,
+            page_text=raw_text
         )
 
         merged = merge_plan_data(merged, cleaned_parsed)
 
-        raw_text = page_result.get("raw") or ""
+        
         possible_index = extract_drawing_index_from_text(raw_text)
 
         if possible_index:
