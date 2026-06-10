@@ -216,7 +216,22 @@ def detect_roof_type(text):
         return "standing_seam_metal"
 
     return None
+    
+def is_legend_sheet(text):
+    t = (text or "").lower()
 
+    legend_hits = [
+        "symbols legend",
+        "materials legend",
+        "door reference",
+        "window reference",
+        "room reference",
+        "grid line reference"
+    ]
+
+    hits = sum(1 for x in legend_hits if x in t)
+
+    return hits >= 2
 
 def extract_outdoor_features(text):
     t = text or ""
@@ -428,7 +443,14 @@ def pre_extract_plan_data(text):
     if not text:
         return {}
 
-    project_type = normalize_project_type(text)
+    legend_sheet = is_legend_sheet(text)
+
+    if legend_sheet:
+        project_type = None
+    else:
+        project_type = normalize_project_type(text)
+    
+    legend_sheet = is_legend_sheet(text)
 
     gross_floor_area = find_number([
         r"PROPOSED GROSS FLOOR AREA\s*=\s*[\d,.\s()A-Z+-]*?=\s*([\d,]+\.\d+|[\d,]+)\s*SF",
@@ -474,8 +496,12 @@ def pre_extract_plan_data(text):
             stories = None
 
     bedrooms, bathrooms = extract_bed_bath_counts(text)
-    foundation_type = detect_foundation_type(text)
-    roof_type = detect_roof_type(text)
+    if legend_sheet:
+        foundation_type = None
+        roof_type = None
+    else:
+        foundation_type = detect_foundation_type(text)
+        roof_type = detect_roof_type(text)
     outdoor_features = extract_outdoor_features(text)
     structural_flags = extract_structural_flags(text)
     site_constraints = extract_site_constraints(text)
@@ -509,7 +535,10 @@ def pre_extract_plan_data(text):
     all_electric = bool(re.search(r"NATURAL GAS IS NOT PERMITTED|ALL[- ]ELECTRIC", text, re.IGNORECASE))
 
     build_method = detect_build_method(text)
-    materials_hint = detect_materials_hint(text)
+    if legend_sheet:
+        materials_hint = None
+    else:
+        materials_hint = detect_materials_hint(text)
     mechanical_systems = extract_mechanical_systems(text)
     scope_of_work = extract_scope_items(text)
 
