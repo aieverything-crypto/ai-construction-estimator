@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from openai import OpenAI
 from plan_jobs import create_plan_job, get_plan_job, start_plan_job
@@ -59,7 +59,7 @@ if api_key:
 
 @app.route("/")
 def home():
-    return {"status": "construction intelligence system running"}
+    return render_template("index.html")
 
 # 🔧 TEST ROUTE (ADD THIS RIGHT BELOW)
 @app.route("/plan-ping", methods=["GET", "POST"])
