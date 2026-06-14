@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Construction AI Dashboard</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #f4f6f8;
+    padding: 30px;
+}
+
+.container {
+    max-width: 1100px;
+    margin: auto;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+}
+
+h2 {
+    margin-bottom: 20px;
+}
+
+input, textarea, select {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+button {
+    padding: 14px;
+    background: #2c7be5;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    width: 100%;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.metric {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    border: 1px solid #e5e7eb;
+}
+
+.result {
+    background: #ffffff;
+    color: #1f2937; /* dark gray instead of black */
+    padding: 20px;
+    border-radius: 10px;
+    white-space: pre-wrap;
+    margin-top: 20px;
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    border: 1px solid #e5e7eb;
+}
+
+.result h2 {
+    color: #2c7be5;
+    margin-top: 15px;
+}
+
+.result h3 {
+    color: #374151;
+}
+
+.result strong {
+    color: #111827;
+}
+
+.green {
+    background: #e6f4ea;
+    color: #1e7e34;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+.yellow {
+    background: #fff8e1;
+    color: #b58105;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+.red {
+    background: #fdecea;
+    color: #b02a37;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+.room-box {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🏗 Contractor Decision Intelligence Dashboard</h2>
+
+<!-- PROJECT INPUT -->
+<div class="card">
+
+<input id="project" placeholder="Project Type (House, Office, etc.)">
+
+<select id="scope">
+    <option value="">Select Scope</option>
+    <option value="ground_up">Ground Up</option>
+    <option value="framing">Framing</option>
+    <option value="foundation">Foundation</option>
+    <option value="electrical">Electrical</option>
+    <option value="plumbing">Plumbing</option>
+    <option value="hvac">HVAC</option>
+    <option value="roofing">Roofing</option>
+    <option value="interior">Interior</option>
+    <option value="remodel">Remodel</option>
+</select>
+
+<input id="size" placeholder="Size (e.g. 2000 sqft)">
+<input id="materials" placeholder="Materials">
+<input id="budget" placeholder="Budget">
+<input id="timeline" placeholder="Timeline">
+<input id="city" placeholder="City">
+
+<textarea id="description" placeholder="Project description"></textarea>
+
+<button onclick="send()">Analyze Project</button>
+
+</div>
+
+<!-- PLAN UPLOAD RESTORED -->
+<div class="card">
+<h3>Upload Plan</h3>
+
+<input type="file" id="file">
+<button onclick="upload()">Analyze Plan</button>
+
+<p id="planStatus"></p>
+</div>
+
+<!-- METRICS -->
+<div class="grid">
+<div class="metric">
+<h4>Total Cost</h4>
+<h3 id="cost">Waiting for estimate</h3>
+</div>
+
+<div class="metric">
+<h4>Recommended Bid</h4>
+<h3 id="bid">Waiting for estimate</h3>
+</div>
+
+<div class="metric">
+<h4>Lead Score</h4>
+<h3 id="score">Waiting for estimate</h3>
+</div>
+
+<div class="metric">
+<h4>Decision</h4>
+<h3 id="decision">Waiting for estimate</h3>
+</div>
+</div>
+
+<div id="rooms" class="room-box"></div>
+
+<div id="result" class="result"></div>
+
+</div>
+
+<script>
+
+const BASE_URL = "https://ai-construction-estimator-k4dm.onrender.com";
+
+function formatMoney(x){
+    if (!x || isNaN(x)) return "-";
+    const rounded = Math.round(x / 1000) * 1000;
+    return "$" + rounded.toLocaleString();
+}
+
+/* =========================
+   ANALYZE PROJECT
+========================= */
+async function send(){
+
+    const scopeValue = document.getElementById("scope").value;
+
+    if(!scopeValue){
+        alert("Please select a scope");
+        return;
+    }
+
+    const payload = {
+        project: document.getElementById("project").value,
+        scope: scopeValue.toLowerCase().trim(),
+        size: document.getElementById("size").value,
+        materials: document.getElementById("materials").value,
+        budget: document.getElementById("budget").value,
+        timeline: document.getElementById("timeline").value,
+        city: document.getElementById("city").value,
+        description: document.getElementById("description").value
+    };
+
+    console.log("PAYLOAD:", payload);
+
+    document.getElementById("result").innerText = "Analyzing...";
+
+    try {
+
+        const res = await fetch(BASE_URL + "/analyze", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+
+        const d = result.data;
+
+        document.getElementById("cost").innerText = formatMoney(d.total_cost);
+        document.getElementById("bid").innerText = formatMoney(d.recommended_bid);
+        document.getElementById("score").innerText = d.lead_score + "/10";
+
+        document.getElementById("decision").innerHTML =
+            `<span class="${d.decision_color}">${d.decision}</span>`;
+
+        document.getElementById("result").innerText = result.analysis;
+
+    } catch(err){
+        document.getElementById("result").innerText = "Error";
+    }
+}
+
+/* =========================
+   ANALYZE PLAN
+========================= */
+async function upload(){
+    const file = document.getElementById("file").files[0];
+
+    if(!file){
+        alert("Upload a file first");
+        return;
+    }
+
+    const fileSizeMB = file.size / (1024 * 1024);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    document.getElementById("planStatus").innerText = "Uploading plan...";
+
+    try {
+
+        if(fileSizeMB > 20){
+            document.getElementById("planStatus").innerText =
+                "Large plan detected (" + fileSizeMB.toFixed(1) + " MB). Starting background processing...";
+
+            const res = await fetch(BASE_URL + "/plan-jobs", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+
+            if(!res.ok){
+                document.getElementById("planStatus").innerText =
+                    "Background job failed to start: " + (data.error || "Unknown error");
+                return;
+            }
+
+            pollPlanJob(data.job_id);
+            return;
+        }
+
+        document.getElementById("planStatus").innerText = "Analyzing plan...";
+
+        const res = await fetch(BASE_URL + "/analyze-plan", {
+            method: "POST",
+            body: formData
+        });
+
+        const text = await res.text();
+        console.log("RAW PLAN RESPONSE:", text);
+
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            document.getElementById("planStatus").innerText =
+                "Plan analysis failed: server did not return JSON";
+            return;
+        }
+
+        if (!res.ok) {
+            document.getElementById("planStatus").innerText =
+                "Plan analysis failed: " + (data.error || text);
+            return;
+        }
+
+        displayPlanResult(data);
+
+    } catch(err){
+        console.error("UPLOAD ERROR:", err);
+
+        document.getElementById("planStatus").innerText =
+            "Plan analysis failed: " + err.message;
+    }
+}
+async function pollPlanJob(jobId){
+    try {
+        const res = await fetch(BASE_URL + "/plan-jobs/" + jobId);
+        const job = await res.json();
+
+        if(!res.ok){
+            document.getElementById("planStatus").innerText =
+                "Job status failed: " + (job.error || "Unknown error");
+            return;
+        }
+
+        document.getElementById("planStatus").innerText =
+			`Processing plan... ${job.progress}% | Page ${job.current_page || job.pages_processed}/${job.pages_target || "?"} | ${job.current_step || ""}`;
+
+        if(job.status === "complete"){
+            document.getElementById("planStatus").innerText = "Background plan analysis complete.";
+            displayPlanResult(job.result);
+            return;
+        }
+
+        if(job.status === "failed"){
+            document.getElementById("planStatus").innerText =
+                "Background plan analysis failed: " + (job.error || "Unknown error");
+            return;
+        }
+
+        setTimeout(() => pollPlanJob(jobId), 2000);
+
+    } catch(err){
+        console.error("POLL ERROR:", err);
+        document.getElementById("planStatus").innerText =
+            "Polling failed: " + err.message;
+    }
+}
+
+
+function displayPlanResult(data){
+    const parsed = data.parsed || {};
+
+    const lines = [];
+
+    lines.push("PLAN ANALYSIS");
+    lines.push("-------------");
+    lines.push(`Mode: ${data.mode || "unknown"}`);
+
+    if (data.pages_requested) {
+        lines.push(`Total Pages: ${data.pages_requested}`);
+    }
+
+    if (data.pages_analyzed) {
+        lines.push(`Pages Analyzed: ${data.pages_analyzed}`);
+    }
+
+    if (parsed.project_type) {
+        lines.push(`Project Type: ${parsed.project_type}`);
+    }
+
+    if (parsed.estimated_size_sqft) {
+        lines.push(`Estimated Size: ${Math.round(parsed.estimated_size_sqft).toLocaleString()} sqft`);
+    }
+
+    if (parsed.stories != null) {
+        lines.push(`Stories: ${parsed.stories}`);
+    }
+
+    if (parsed.bedrooms != null && parsed.bedrooms > 0) {
+        lines.push(`Bedrooms: ${parsed.bedrooms}`);
+    }
+
+    if (parsed.bathrooms != null && parsed.bathrooms > 0) {
+        lines.push(`Bathrooms: ${parsed.bathrooms}`);
+    }
+
+    if (parsed.garage && parsed.garage.present) {
+        const garageText = parsed.garage.sqft
+            ? `Yes (${Math.round(parsed.garage.sqft).toLocaleString()} sqft)`
+            : "Yes";
+        lines.push(`Garage: ${garageText}`);
+    }
+
+    if (parsed.foundation_type) {
+        lines.push(`Foundation Type: ${parsed.foundation_type}`);
+    }
+
+    if (parsed.roof_type) {
+        lines.push(`Roof Type: ${parsed.roof_type}`);
+    }
+
+    if (parsed.materials_hint) {
+        lines.push(`Materials Hint: ${parsed.materials_hint}`);
+    }
+
+    if (parsed.location_data && parsed.location_data.address) {
+        lines.push(`Address: ${parsed.location_data.address}`);
+    } else if (parsed.location_data && parsed.location_data.city) {
+        lines.push(`City: ${parsed.location_data.city}`);
+    }
+
+    if (parsed.outdoor_features && parsed.outdoor_features.length) {
+        lines.push(`Outdoor Features: ${parsed.outdoor_features.join(", ")}`);
+    }
+
+    if (parsed.structural_flags && parsed.structural_flags.length) {
+        lines.push(`Structural Flags: ${parsed.structural_flags.join(", ")}`);
+    }
+
+    if (parsed.site_constraints && parsed.site_constraints.length) {
+        lines.push(`Site Constraints: ${parsed.site_constraints.join(", ")}`);
+    }
+
+    if (parsed.mechanical_systems && parsed.mechanical_systems.length) {
+        lines.push(`Mechanical Systems: ${parsed.mechanical_systems.join(", ")}`);
+    }
+
+    if (parsed.scope_of_work && parsed.scope_of_work.length) {
+        lines.push(`Scope Clues: ${parsed.scope_of_work.join(", ")}`);
+    }
+
+    if (parsed.complexity_factors && parsed.complexity_factors.length) {
+        lines.push(`Complexity Factors: ${parsed.complexity_factors.join(", ")}`);
+    }
+
+    if (parsed.risk_flags && parsed.risk_flags.length) {
+        lines.push(`Risk Flags: ${parsed.risk_flags.join(", ")}`);
+    }
+
+    if (parsed.notes) 
+    if (parsed.notes) {
+        lines.push(`Notes: ${parsed.notes}`);
+    }
+
+        document.getElementById("result").innerText = buildDetailedPlanReport(data);
+
+    if (data.parsed) {
+		autofillEstimatorFromPlan(data.parsed);
+
+		document.getElementById("planStatus").innerText =
+			"Plan analyzed. Estimator fields filled. Add budget/timeline, then click Analyze Project.";
+	}
+}
+
+function buildDetailedPlanReport(data){
+    const parsed = data.parsed || {};
+    const lines = [];
+
+    lines.push("DETAILED PLAN ANALYSIS");
+    lines.push("======================");
+    lines.push("");
+	if (parsed.contractor_summary) {
+	
+	if (parsed.sheet_type_summary) {
+
+		lines.push("SHEET TYPE SUMMARY");
+		lines.push("------------------");
+
+		Object.entries(parsed.sheet_type_summary).forEach(([type, count]) => {
+			lines.push(`${type}: ${count} page(s)`);
+		});
+
+		lines.push("");
+	}
+	
+	if (parsed.contractor_priority_sheets && parsed.contractor_priority_sheets.length) {
+		lines.push("CONTRACTOR PRIORITY SHEETS");
+		lines.push("--------------------------");
+
+		parsed.contractor_priority_sheets.forEach(item => {
+			lines.push(
+				`${item.sheet} — ${item.title} | ${item.discipline} | priority ${item.contractor_priority_score}/20`
+			);
+		});
+
+		lines.push("");
+	}
+
+	if (parsed.drawing_index && parsed.drawing_index.length) {
+		lines.push("DRAWING INDEX DETECTED");
+		lines.push("----------------------");
+
+		parsed.drawing_index.forEach(item => {
+			lines.push(`${item.sheet} — ${item.title} | ${item.discipline}`);
+		});
+
+		lines.push("");
+	}
+	
+	if (parsed.page_insights && parsed.page_insights.length) {
+
+		lines.push("PAGE INSIGHTS");
+		lines.push("-------------");
+
+		parsed.page_insights.forEach(item => {
+
+			const tags = item.page_tags && item.page_tags.length
+				? ` | tags: ${item.page_tags.join(", ")}`
+				: "";
+
+			lines.push(`Page ${item.page} — ${item.page_type}${tags} | importance: ${item.page_importance}/10`);
+
+			lines.push(
+            item.insight || "No page-specific insight available."
+			);
+
+			lines.push("");
+		});
+	}
+		lines.push("CONTRACTOR SUMMARY");
+		lines.push("------------------");
+		lines.push(parsed.contractor_summary);
+		lines.push("");
+	}
+	
+	if (parsed.plan_scores) {
+		lines.push("PLAN INTELLIGENCE SCORES");
+		lines.push("------------------------");
+		lines.push(`Complexity Score: ${parsed.plan_scores.complexity_score}/10`);
+		lines.push(`Site Risk Score: ${parsed.plan_scores.site_risk_score}/10`);
+		lines.push(`MEP Coordination Score: ${parsed.plan_scores.mep_coordination_score}/10`);
+		lines.push(`Estimate Confidence: ${parsed.plan_scores.estimate_confidence} (${parsed.plan_scores.estimate_confidence_score}/10)`);
+		lines.push("");
+	}
+	
+	if (parsed.global_fact_confidence) {
+		lines.push("GLOBAL FACT CONFIDENCE");
+		lines.push("----------------------");
+
+		Object.entries(parsed.global_fact_confidence).forEach(([field, info]) => {
+			const pages = info.source_pages && info.source_pages.length
+				? ` | pages: ${info.source_pages.join(", ")}`
+				: "";
+
+			lines.push(
+				`${field}: ${info.value} | confidence: ${info.confidence_percent}% | votes: ${info.votes}/${info.total_votes}${pages}`
+			);
+		});
+
+		lines.push("");
+	}
+	
+    lines.push("1. PROJECT OVERVIEW");
+    lines.push("-------------------");
+    lines.push(`Plan Mode: ${data.mode || "unknown"}`);
+    lines.push(`Total Pages: ${data.pages_requested || "N/A"}`);
+    lines.push(`Pages Analyzed: ${data.pages_analyzed || "N/A"}`);
+    lines.push(`Project Type: ${parsed.project_type || "Not detected"}`);
+    lines.push(`Estimated Size: ${
+        parsed.estimated_size_sqft
+            ? Math.round(parsed.estimated_size_sqft).toLocaleString() + " sqft"
+            : "Not detected"
+    }`);
+    lines.push(`Stories: ${parsed.stories || "Not detected"}`);
+    lines.push(`Bedrooms: ${parsed.bedrooms || "Not detected"}`);
+    lines.push(`Bathrooms: ${parsed.bathrooms || "Not detected"}`);
+    lines.push("");
+
+    lines.push("2. BUILDING CHARACTERISTICS");
+    lines.push("---------------------------");
+    lines.push(`Garage: ${
+        parsed.garage && parsed.garage.present
+            ? "Yes" + (parsed.garage.sqft ? ` (${Math.round(parsed.garage.sqft).toLocaleString()} sqft)` : "")
+            : "Not clearly detected"
+    }`);
+    lines.push(`Foundation: ${parsed.foundation_type || "Not detected"}`);
+    lines.push(`Roof: ${parsed.roof_type || "Not detected"}`);
+    lines.push(`Materials: ${parsed.materials_hint || "Not detected"}`);
+    lines.push("");
+
+    lines.push("3. LOCATION / SITE CONDITIONS");
+    lines.push("-----------------------------");
+    if (parsed.location_data) {
+        lines.push(`Address: ${parsed.location_data.address || "Not detected"}`);
+        lines.push(`City: ${parsed.location_data.city || "Not detected"}`);
+        lines.push(`Lot Area: ${
+            parsed.location_data.lot_area_sqft
+                ? Math.round(parsed.location_data.lot_area_sqft).toLocaleString() + " sqft"
+                : "Not detected"
+        }`);
+        lines.push(`Flood Zone: ${parsed.location_data.flood_zone || "Not detected"}`);
+    } else {
+        lines.push("No location data detected.");
+    }
+    lines.push("");
+
+    lines.push("4. DETECTED SCOPE OF WORK");
+    lines.push("-------------------------");
+    if (parsed.scope_of_work && parsed.scope_of_work.length) {
+        parsed.scope_of_work.forEach(item => lines.push(`- ${item}`));
+    } else {
+        lines.push("- No clear scope items detected.");
+    }
+    lines.push("");
+
+    lines.push("5. STRUCTURAL / SITE COMPLEXITY");
+    lines.push("-------------------------------");
+    if (parsed.structural_flags && parsed.structural_flags.length) {
+        lines.push("Structural Flags:");
+        parsed.structural_flags.forEach(item => lines.push(`- ${item}`));
+    } else {
+        lines.push("Structural Flags: None clearly detected.");
+    }
+
+    if (parsed.site_constraints && parsed.site_constraints.length) {
+        lines.push("");
+        lines.push("Site Constraints:");
+        parsed.site_constraints.forEach(item => lines.push(`- ${item}`));
+    } else {
+        lines.push("");
+        lines.push("Site Constraints: None clearly detected.");
+    }
+    lines.push("");
+
+    lines.push("6. MEP / SYSTEMS");
+    lines.push("----------------");
+    if (parsed.mechanical_systems && parsed.mechanical_systems.length) {
+        parsed.mechanical_systems.forEach(item => lines.push(`- ${item}`));
+    } else {
+        lines.push("- No major MEP systems detected.");
+    }
+
+    if (parsed.requirements) {
+        lines.push("");
+        lines.push(`Fire Sprinklers Required: ${parsed.requirements.sprinklers_required ? "Yes" : "No / not detected"}`);
+        lines.push(`Solar Required: ${parsed.requirements.solar_required ? "Yes" : "No / not detected"}`);
+        lines.push(`All-Electric: ${parsed.requirements.all_electric ? "Yes" : "No / not detected"}`);
+    }
+    lines.push("");
+
+    lines.push("7. CONTRACTOR RISK NOTES");
+    lines.push("------------------------");
+    if (parsed.risk_flags && parsed.risk_flags.length) {
+        parsed.risk_flags.forEach(item => lines.push(`- ${item}`));
+    } else {
+        lines.push("- No major risk flags detected.");
+    }
+    lines.push("");
+
+    lines.push("8. ESTIMATE-RELEVANT TAKEAWAYS");
+    lines.push("------------------------------");
+
+    const takeaways = [];
+
+    if (parsed.estimated_size_sqft) {
+        takeaways.push("Use detected square footage as the primary cost driver.");
+    }
+
+    if (parsed.foundation_type) {
+        takeaways.push(`Foundation type may affect base cost: ${parsed.foundation_type}.`);
+    }
+
+    if (parsed.site_constraints && parsed.site_constraints.length) {
+        takeaways.push("Site constraints may require contingency or labor adjustment.");
+    }
+
+    if (parsed.mechanical_systems && parsed.mechanical_systems.length) {
+        takeaways.push("MEP systems may increase subcontractor coordination and pricing complexity.");
+    }
+
+    if (parsed.risk_flags && parsed.risk_flags.length) {
+        takeaways.push("Risk flags should be reviewed before final bid recommendation.");
+    }
+
+    if (takeaways.length) {
+        takeaways.forEach(item => lines.push(`- ${item}`));
+    } else {
+        lines.push("- Not enough plan detail detected for strong estimate takeaways.");
+    }
+
+    return lines.join("\n");
+}
+
+function detectScopeFromPlan(parsed){
+    const scopeItems = (parsed.scope_of_work || []).join(" ").toLowerCase();
+    const materials = (parsed.materials_hint || "").toLowerCase();
+    const complexity = (parsed.complexity_factors || []).join(" ").toLowerCase();
+    const projectType = (parsed.project_type || "").toLowerCase();
+
+    const text = scopeItems + " " + materials + " " + complexity + " " + projectType;
+
+    const fullBuildingSignals = [
+        "single family",
+        "residential",
+        "garage",
+        "bedroom",
+        "bathroom",
+        "stories",
+        "foundation work",
+        "roofing",
+        "electrical",
+        "plumbing",
+        "hvac"
+    ];
+
+    let fullSignalCount = 0;
+
+    fullBuildingSignals.forEach(signal => {
+        if (text.includes(signal)) {
+            fullSignalCount++;
+        }
+    });
+
+    if (
+        parsed.estimated_size_sqft &&
+        parsed.estimated_size_sqft > 1000 &&
+        fullSignalCount >= 3
+    ) {
+        return "ground_up";
+    }
+
+    if (text.includes("remodel") || text.includes("renovation") || text.includes("demolition")) {
+        return "remodel";
+    }
+
+    if (text.includes("foundation") || text.includes("footing") || text.includes("slab")) {
+        return "foundation";
+    }
+
+    if (text.includes("framing") || text.includes("wood framing") || text.includes("steel framing")) {
+        return "framing";
+    }
+
+    if (text.includes("electrical") || text.includes("panel") || text.includes("service")) {
+        return "electrical";
+    }
+
+    if (text.includes("plumbing") || text.includes("fixture") || text.includes("water heater")) {
+        return "plumbing";
+    }
+
+    if (text.includes("hvac") || text.includes("heat pump") || text.includes("air handler")) {
+        return "hvac";
+    }
+
+    if (text.includes("roof") || text.includes("roofing")) {
+        return "roofing";
+    }
+
+    if (text.includes("interior") || text.includes("drywall") || text.includes("finish")) {
+        return "interior";
+    }
+
+    return "ground_up";
+}
+
+function autofillEstimatorFromPlan(parsed){
+    const detectedScope = detectScopeFromPlan(parsed);
+
+    document.getElementById("project").value = parsed.project_type || "";
+    document.getElementById("scope").value = detectedScope;
+
+    if (parsed.estimated_size_sqft) {
+        document.getElementById("size").value =
+            Math.round(parsed.estimated_size_sqft) + " sqft";
+    }
+
+    document.getElementById("materials").value = parsed.materials_hint || "";
+
+    if (parsed.location_data && parsed.location_data.city) {
+        document.getElementById("city").value = parsed.location_data.city;
+    }
+
+    const descriptionParts = [];
+
+    if (parsed.scope_of_work && parsed.scope_of_work.length) {
+        descriptionParts.push("Scope: " + parsed.scope_of_work.join(", "));
+    }
+
+    if (parsed.complexity_factors && parsed.complexity_factors.length) {
+        descriptionParts.push("Complexity: " + parsed.complexity_factors.join(", "));
+    }
+
+    if (parsed.risk_flags && parsed.risk_flags.length) {
+        descriptionParts.push("Risks: " + parsed.risk_flags.join(", "));
+    }
+
+    document.getElementById("description").value = descriptionParts.join("\n");
+}
+
+async function runEstimatorFromPlan(parsed){
+
+    const payload = {
+        project: parsed.project_type || "",
+        scope: detectScopeFromPlan(parsed), // default for now
+        size: parsed.estimated_size_sqft || "",
+        materials: parsed.materials_hint || "",
+        budget: "",
+        timeline: "",
+        city: (parsed.location_data && parsed.location_data.city) || "",
+        description: (parsed.complexity_factors || []).join(", ")
+    };
+
+    console.log("AUTO ESTIMATOR PAYLOAD:", payload);
+
+    try {
+        const res = await fetch(BASE_URL + "/analyze", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+
+        const d = result.data;
+
+        document.getElementById("cost").innerText = formatMoney(d.total_cost);
+        document.getElementById("bid").innerText = formatMoney(d.recommended_bid);
+        document.getElementById("score").innerText = d.lead_score + "/10";
+
+        document.getElementById("decision").innerHTML =
+            `<span class="${d.decision_color}">${d.decision}</span>`;
+
+    } catch(err){
+        console.error("AUTO ESTIMATE ERROR:", err);
+    }
+}
+</script>
+
+</body>
+</html>
