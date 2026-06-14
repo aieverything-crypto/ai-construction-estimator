@@ -45,6 +45,23 @@ def normalize_vote_value(value):
 
     return str(value).strip()
 
+PAGE_TYPE_VOTE_WEIGHTS = {
+    "cover_sheet": 5,
+    "floor_plan": 4,
+    "foundation": 3,
+    "roof_plan": 3,
+    "site_civil": 2,
+    "structural": 2,
+    "mechanical": 1,
+    "electrical": 1,
+    "plumbing": 1,
+    "details": 1,
+    "unknown": 0
+}
+
+
+def get_page_vote_weight(page_type):
+    return PAGE_TYPE_VOTE_WEIGHTS.get(page_type, 1)
 
 def vote_global_facts(page_results):
     votes = {field: Counter() for field in GLOBAL_FACT_VOTE_FIELDS}
@@ -76,22 +93,23 @@ def vote_global_facts(page_results):
             if value is None:
                 continue
 
-            weight = 1
+            weight = get_page_vote_weight(page_type)
 
-            if page_type == "cover_sheet":
-                weight = 5
+            if weight <= 0:
+                continue
 
-            elif page_type == "floor_plan":
-                weight = 3
+            # Field-specific trust boosts
+            if field in ["project_type", "estimated_size_sqft", "stories"] and page_type == "cover_sheet":
+                weight += 2
 
-            elif page_type == "site_civil":
-                weight = 3
+            if field in ["bedrooms", "bathrooms"] and page_type == "floor_plan":
+                weight += 2
 
-            elif page_type == "foundation":
-                weight = 2
+            if field == "foundation_type" and page_type == "foundation":
+                weight += 2
 
-            elif page_type == "roof_plan":
-                weight = 2
+            if field == "roof_type" and page_type == "roof_plan":
+                weight += 2
 
             votes[field][value] += weight
 
