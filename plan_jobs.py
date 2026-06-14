@@ -53,6 +53,7 @@ def vote_global_facts(page_results):
     for page in page_results:
         parsed = page.get("parsed") or {}
         page_type = page.get("page_type", "unknown")
+        parsed = apply_field_page_type_gate(parsed, page_type)
         page_tags = page.get("page_tags", [])
         page_number = page.get("page")
 
@@ -562,11 +563,11 @@ def is_legend_or_reference_page(page_text):
     return any(signal in t for signal in legend_signals)
     
 FIELD_ALLOWED_PAGE_TYPES = {
-    "project_type": ["cover_sheet", "floor_plan", "site_civil"],
+    "project_type": ["cover_sheet", "floor_plan"],
 
-    "estimated_size_sqft": ["cover_sheet", "floor_plan", "site_civil"],
+    "estimated_size_sqft": ["cover_sheet", "floor_plan"],
 
-    "stories": ["cover_sheet", "floor_plan", "site_civil"],
+    "stories": ["cover_sheet", "floor_plan"],
 
     "bedrooms": ["cover_sheet", "floor_plan"],
 
@@ -578,7 +579,6 @@ FIELD_ALLOWED_PAGE_TYPES = {
 
     "materials_hint": [
         "cover_sheet",
-        "floor_plan",
         "foundation",
         "structural",
         "roof_plan"
@@ -590,14 +590,47 @@ def apply_field_page_type_gate(parsed, page_type):
     if not isinstance(parsed, dict):
         return {}
 
+    # Unknown pages should not contribute structured facts
+    if page_type == "unknown":
+        return {
+            "notes": parsed.get("notes") or "Unknown page type; structured facts ignored."
+        }
+
     cleaned = dict(parsed)
 
     for field, allowed_types in FIELD_ALLOWED_PAGE_TYPES.items():
         if field in cleaned and page_type not in allowed_types:
             cleaned.pop(field, None)
 
+    # Discipline-specific cleanup
+    if page_type in ["mechanical", "electrical", "plumbing"]:
+        cleaned.pop("foundation_type", None)
+        cleaned.pop("roof_type", None)
+        cleaned.pop("materials_hint", None)
+        cleaned.pop("structural_flags", None)
+
+    if page_type == "structural":
+        cleaned.pop("mechanical_systems", None)
+        cleaned.pop("requirements", None)
+        cleaned.pop("location_data", None)
+
+    if page_type == "site_civil":
+        cleaned.pop("bedrooms", None)
+        cleaned.pop("bathrooms", None)
+        cleaned.pop("stories", None)
+        cleaned.pop("estimated_size_sqft", None)
+        cleaned.pop("project_type", None)
+        cleaned.pop("roof_type", None)
+
+    if page_type == "details":
+        cleaned.pop("project_type", None)
+        cleaned.pop("estimated_size_sqft", None)
+        cleaned.pop("stories", None)
+        cleaned.pop("bedrooms", None)
+        cleaned.pop("bathrooms", None)
+
     return cleaned
-    
+
 def strip_global_facts_from_local_page(parsed, page_type, page_tags, page_text=""):
     """
     Prevents detail, legend, notes, and reference sheets from overriding whole-project facts.
