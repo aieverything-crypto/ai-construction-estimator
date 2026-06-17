@@ -668,6 +668,33 @@ function buildDetailedPlanReport(data){
 	}
 
 	lines.push("");
+
+	lines.push("TAKEOFF SUMMARY");
+	lines.push("---------------");
+
+	if (parsed.foundation_type) {
+   	 lines.push(`Foundation: ${parsed.foundation_type}`);
+	}
+
+	if (parsed.garage && parsed.garage.present) {
+    	lines.push(`Garage: ${parsed.garage.sqft ? Math.round(parsed.garage.sqft).toLocaleString() + " sqft" : "Detected"}`);
+	}
+
+	if (parsed.roof_type) {
+  	  lines.push(`Roofing: ${parsed.roof_type}`);
+	}
+
+	if (parsed.scope_of_work && parsed.scope_of_work.length) {
+  	  const takeoffItems = parsed.scope_of_work.filter(item =>
+      	  !["siding", "stairs"].includes(item)
+  	  );
+
+    	takeoffItems.forEach(item => {
+       	 lines.push(`- ${item}`);
+   	 });
+	}
+
+	lines.push("");
 	
     lines.push("3. LOCATION / SITE CONDITIONS");
     lines.push("-----------------------------");
