@@ -287,10 +287,10 @@ def build_page_insight(page_type, parsed):
     if parsed.get("stories") and page_type in ["cover_sheet", "floor_plan", "site_civil"]:
         clues.append(f"stories: {parsed.get('stories')}")
 
-    if parsed.get("bedrooms"):
+    if parsed.get("bedrooms") and page_type in ["cover_sheet", "floor_plan"]:
         clues.append(f"bedrooms: {parsed.get('bedrooms')}")
 
-    if parsed.get("bathrooms"):
+    if parsed.get("bathrooms") and page_type in ["cover_sheet", "floor_plan"]:
         clues.append(f"bathrooms: {parsed.get('bathrooms')}")
 
     if parsed.get("foundation_type"):
@@ -299,7 +299,7 @@ def build_page_insight(page_type, parsed):
     if parsed.get("roof_type"):
         clues.append(f"roof: {parsed.get('roof_type')}")
 
-    if parsed.get("materials_hint"):
+    if parsed.get("materials_hint") and page_type in ["cover_sheet", "floor_plan", "foundation", "roof_plan"]:
         clues.append(f"materials: {parsed.get('materials_hint')}")
 
     scope = parsed.get("scope_of_work") or []
@@ -647,7 +647,55 @@ def apply_field_page_type_gate(parsed, page_type):
         cleaned.pop("bedrooms", None)
         cleaned.pop("bathrooms", None)
 
+    if "scope_of_work" in cleaned:
+    cleaned["scope_of_work"] = filter_scope_by_page_type(
+        cleaned.get("scope_of_work") or [],
+        page_type
+    )
+
     return cleaned
+
+def filter_scope_by_page_type(scope_items, page_type):
+    if not scope_items:
+        return []
+
+    allowed = {
+        "structural": {
+            "foundation work",
+            "crawlspace",
+            "garage slab",
+            "framing",
+            "retaining walls",
+            "stairs"
+        },
+        "foundation": {
+            "foundation work",
+            "crawlspace",
+            "garage slab",
+            "retaining walls"
+        },
+        "mechanical": {
+            "hvac"
+        },
+        "electrical": {
+            "electrical service",
+            "solar",
+            "fire sprinklers"
+        },
+        "plumbing": {
+            "plumbing fixtures"
+        },
+        "roof_plan": {
+            "roofing",
+            "solar"
+        }
+    }
+
+    if page_type not in allowed:
+        return scope_items
+
+    allowed_set = allowed[page_type]
+    return [item for item in scope_items if item in allowed_set]
 
 def strip_global_facts_from_local_page(parsed, page_type, page_tags, page_text=""):
     """
