@@ -490,6 +490,27 @@ def pre_extract_plan_data(text):
         r"(\d+)\s*STORIES"
     ], text)
 
+    living_area = find_number([
+        r"LIVING AREA\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF",
+        r"PROPOSED LIVING AREA\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF",
+        r"CONDITIONED LIVING AREA\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF"
+    ], text)
+
+    deck_sqft = find_number([
+        r"DECK\s*AREA\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF",
+        r"DECK\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF"
+    ], text)
+
+    patio_sqft = find_number([
+        r"PATIO\s*AREA\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF",
+        r"PATIO\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF"
+    ], text)
+
+    porch_sqft = find_number([
+        r"PORCH\s*AREA\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF",
+        r"PORCH\s*[:=\-]?\s*([\d,]+\.\d+|[\d,]+)\s*SF"
+    ], text)
+
     if stories is not None:
         try:
             stories = int(float(stories))
@@ -560,12 +581,16 @@ def pre_extract_plan_data(text):
         "project_type": project_type,
         "estimated_size_sqft": estimated_size_sqft,
         "area_breakdown": {
-            "first_floor_sqft": first_floor,
-            "second_floor_sqft": second_floor,
-            "garage_sqft": garage_sqft,
-            "total_sqft": gross_floor_area,
-            "conditioned_sqft": conditioned_area
-        },
+        "first_floor_sqft": first_floor,
+        "second_floor_sqft": second_floor,
+        "garage_sqft": garage_sqft,
+        "living_sqft": living_area,
+        "deck_sqft": deck_sqft,
+        "patio_sqft": patio_sqft,
+        "porch_sqft": porch_sqft,
+        "total_sqft": gross_floor_area,
+        "conditioned_sqft": conditioned_area
+    },
         "stories": stories,
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
