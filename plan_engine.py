@@ -126,40 +126,41 @@ def detect_build_method(text):
 
 def detect_materials_hint(text):
     t = (text or "").lower()
+
+    if is_legend_sheet(text):
+        return None
+
     hints = []
 
-    if "2x6 wood studs" in t or "2 x 6 wood studs" in t or "wood framing" in t or "type v-b" in t:
+    def has(pattern):
+        return re.search(pattern, t, re.IGNORECASE)
+
+    # WOOD — require context
+    if has(r"\b(wood framing|wood studs?|wood joists?|wood beams?|2x4|2x6|lvl|glulam|plywood sheathing)\b"):
         hints.append("wood framing")
-    if "steel frame" in t or "steel framing" in t or "structural steel" in t:
-        hints.append("steel framing")
-    if "cmu" in t or "concrete masonry" in t or "masonry" in t:
-        hints.append("masonry")
-    if "concrete" in t or "foundation" in t or "slab" in t:
+
+    # STEEL — require structural context
+    if has(r"\b(structural steel|steel beam|steel column|w\d+x\d+|hss|tube steel|steel framing)\b"):
+        hints.append("structural steel")
+
+    # CONCRETE — require construction context
+    if has(r"\b(concrete footing|concrete slab|slab on grade|concrete wall|foundation wall|grade beam|mat foundation)\b"):
         hints.append("concrete foundation")
-    if "standing metal seam" in t or "standing seam metal" in t:
-        hints.append("standing seam metal roofing")
-    if "composite roofing" in t or "composition shingle" in t:
-        hints.append("composite roofing")
-    if "tile roof" in t:
-        hints.append("tile roofing")
-    if "siding" in t:
-        hints.append("siding")
-    if "stucco" in t:
+
+    # ROOFING — require assembly context
+    if has(r"\b(composition shingle|asphalt shingle roof|built-up roof|granulated cap sheet|standing seam metal roof|tile roof)\b"):
+        hints.append("roofing system")
+
+    if has(r"\bstucco\b"):
         hints.append("stucco exterior")
-    if "glass" in t or "curtain wall" in t:
-        hints.append("glass-heavy exterior")
+
+    if has(r"\bsiding\b"):
+        hints.append("siding")
 
     if not hints:
         return None
 
-    seen = set()
-    deduped = []
-    for item in hints:
-        if item not in seen:
-            seen.add(item)
-            deduped.append(item)
-
-    return ", ".join(deduped)
+    return ", ".join(dict.fromkeys(hints))
 
 
 def extract_bed_bath_counts(text):
