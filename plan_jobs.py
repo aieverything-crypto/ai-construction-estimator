@@ -648,7 +648,7 @@ def apply_field_page_type_gate(parsed, page_type):
         cleaned.pop("bathrooms", None)
 
     if "scope_of_work" in cleaned:
-    cleaned["scope_of_work"] = filter_scope_by_page_type(
+        cleaned["scope_of_work"] = filter_scope_by_page_type(
         cleaned.get("scope_of_work") or [],
         page_type
     )
