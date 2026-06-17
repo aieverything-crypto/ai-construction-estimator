@@ -488,6 +488,33 @@ function buildDetailedPlanReport(data){
 
 		lines.push("");
 	}
+
+	lines.push("QUICK CONTRACTOR SUMMARY");
+	lines.push("------------------------");
+
+	lines.push(`Project Type: ${parsed.project_type || "Not detected"}`);
+
+	if (parsed.estimated_size_sqft) {
+    	lines.push(`Main Size: ${Math.round(parsed.estimated_size_sqft).toLocaleString()} sqft`);
+	}
+
+	if (parsed.area_breakdown && parsed.area_breakdown.garage_sqft) {
+    	lines.push(`Garage: ${Math.round(parsed.area_breakdown.garage_sqft).toLocaleString()} sqft`);
+	}
+
+	if (parsed.area_breakdown && parsed.area_breakdown.living_sqft) {
+    	lines.push(`Living Area: ${Math.round(parsed.area_breakdown.living_sqft).toLocaleString()} sqft`);
+	}
+
+	if (parsed.foundation_type) {
+    	lines.push(`Foundation: ${parsed.foundation_type}`);
+	}
+
+	if (parsed.roof_type) {
+    	lines.push(`Roof: ${parsed.roof_type}`);
+	}
+
+	lines.push("");
 	
 	if (parsed.contractor_priority_sheets && parsed.contractor_priority_sheets.length) {
 		lines.push("CONTRACTOR PRIORITY SHEETS");
@@ -594,6 +621,54 @@ function buildDetailedPlanReport(data){
     lines.push(`Materials: ${parsed.materials_hint || "Not detected"}`);
     lines.push("");
 
+	lines.push("2B. AREA BREAKDOWN");
+	lines.push("------------------");
+
+	if (parsed.area_breakdown) {
+    	const area = parsed.area_breakdown;
+
+   	 if (area.total_sqft) {
+       	 lines.push(`Total Area: ${Math.round(area.total_sqft).toLocaleString()} sqft`);
+   	 }
+
+    	if (area.conditioned_sqft) {
+        	lines.push(`Conditioned Area: ${Math.round(area.conditioned_sqft).toLocaleString()} sqft`);
+    	}
+
+    	if (area.living_sqft) {
+        	lines.push(`Living Area: ${Math.round(area.living_sqft).toLocaleString()} sqft`);
+    	}
+
+    	if (area.first_floor_sqft) {
+       	 lines.push(`First Floor: ${Math.round(area.first_floor_sqft).toLocaleString()} sqft`);
+    	}
+
+    	if (area.second_floor_sqft) {
+        	lines.push(`Second Floor: ${Math.round(area.second_floor_sqft).toLocaleString()} sqft`);
+    	}
+
+    	if (area.garage_sqft) {
+      	  lines.push(`Garage Area: ${Math.round(area.garage_sqft).toLocaleString()} sqft`);
+    	}
+
+  	  if (area.deck_sqft) {
+      	  lines.push(`Deck Area: ${Math.round(area.deck_sqft).toLocaleString()} sqft`);
+   	 }
+
+  	  if (area.patio_sqft) {
+     	   lines.push(`Patio Area: ${Math.round(area.patio_sqft).toLocaleString()} sqft`);
+  	  }
+
+   	 if (area.porch_sqft) {
+    	    lines.push(`Porch Area: ${Math.round(area.porch_sqft).toLocaleString()} sqft`);
+  	  }
+
+	} else {
+  	  lines.push("No area breakdown detected.");
+	}
+
+	lines.push("");
+	
     lines.push("3. LOCATION / SITE CONDITIONS");
     lines.push("-----------------------------");
     if (parsed.location_data) {
