@@ -458,7 +458,7 @@ function displayPlanResult(data){
         lines.push(`Notes: ${parsed.notes}`);
     }
 
-        document.getElementById("result").innerText = buildDetailedPlanReport(data);
+        renderPlanReport(data);;
 
     if (data.parsed) {
 		autofillEstimatorFromPlan(data.parsed);
@@ -466,6 +466,50 @@ function displayPlanResult(data){
 		document.getElementById("planStatus").innerText =
 			"Plan analyzed. Estimator fields filled. Add budget/timeline, then click Analyze Project.";
 	}
+}
+
+function renderPlanReport(data) {
+    const report = buildDetailedPlanReport(data);
+
+    const parts = report.split("[PAGE_INSIGHTS_START]");
+    const mainReport = parts[0];
+
+    let pageInsights = "";
+
+    if (parts.length > 1) {
+        pageInsights = parts[1].split("[PAGE_INSIGHTS_END]")[0];
+    }
+
+    const result = document.getElementById("result");
+
+    result.innerHTML = `
+<pre>${mainReport}</pre>
+
+${pageInsights ? `
+<button id="togglePageInsightsBtn">
+    Show Page Insights
+</button>
+
+<div id="pageInsightsContainer" style="display:none;">
+    <pre>${pageInsights}</pre>
+</div>
+` : ""}
+`;
+
+    const btn = document.getElementById("togglePageInsightsBtn");
+    const container = document.getElementById("pageInsightsContainer");
+
+    if (btn && container) {
+        btn.addEventListener("click", () => {
+            const hidden = container.style.display === "none";
+
+            container.style.display = hidden ? "block" : "none";
+
+            btn.textContent = hidden
+                ? "Hide Page Insights"
+                : "Show Page Insights";
+        });
+    }
 }
 
 function buildDetailedPlanReport(data){
@@ -771,7 +815,7 @@ function buildDetailedPlanReport(data){
 	
 
 	
-
+	lines.push("[PAGE_INSIGHTS_START]");
 	/* DEBUG SECTIONS */
 	lines.push("DEBUG / TECHNICAL ANALYSIS");
 	lines.push("==========================");
@@ -833,7 +877,11 @@ function buildDetailedPlanReport(data){
 
 			lines.push("");
 		});
+
+		lines.push("[PAGE_INSIGHTS_END]");
 	}
+
+	
 	
 	if (parsed.contractor_summary) {
 		lines.push("CONTRACTOR SUMMARY");
