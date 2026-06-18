@@ -757,10 +757,7 @@ function buildDetailedPlanReport(data){
         lines.push("- Not enough plan detail detected for strong estimate takeaways.");
     }
 
-	/* DEBUG SECTIONS */
-	lines.push("DEBUG / TECHNICAL ANALYSIS");
-	lines.push("==========================");
-	lines.push("");
+	
 	
 	/* SHEET TYPE SUMMARY */
 	/* CONTRACTOR PRIORITY SHEETS */
@@ -770,9 +767,15 @@ function buildDetailedPlanReport(data){
 	/* PLAN INTELLIGENCE SCORES */
 	/* GLOBAL FACT CONFIDENCE */
 
-return lines.join("\n");
 
-	if (parsed.contractor_summary) {
+	
+
+	
+
+	/* DEBUG SECTIONS */
+	lines.push("DEBUG / TECHNICAL ANALYSIS");
+	lines.push("==========================");
+	lines.push("");
 	
 	if (parsed.sheet_type_summary) {
 
@@ -831,6 +834,8 @@ return lines.join("\n");
 			lines.push("");
 		});
 	}
+	
+	if (parsed.contractor_summary) {
 		lines.push("CONTRACTOR SUMMARY");
 		lines.push("------------------");
 		lines.push(parsed.contractor_summary);
