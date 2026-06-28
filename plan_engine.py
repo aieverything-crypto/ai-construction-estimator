@@ -258,6 +258,99 @@ def extract_outdoor_features(text):
 
     return items
 
+def extract_measurement_quantities(text):
+    t = text or ""
+
+    quantities = {
+        "areas": [],
+        "linear_lengths": [],
+        "heights": [],
+        "footings": [],
+        "beams": [],
+        "walls": []
+    }
+
+    # Areas: 514 SF, 2,747 SQ FT, etc.
+    area_patterns = [
+        r"\b([A-Za-z0-9 \-/]+?)\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?|SQUARE FEET)\b",
+        r"\b([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?|SQUARE FEET)\s+([A-Za-z0-9 \-/]+)\b"
+    ]
+
+    for pattern in area_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            label = " ".join(match.group(1).split())
+            value = safe_float(match.group(2))
+
+            if value and 10 <= value <= 100000:
+                quantities["areas"].append({
+                    "label": label[:60],
+                    "value": value,
+                    "unit": "sqft"
+                })
+
+    # Linear feet: 48 LF, 120 linear feet
+    lf_patterns = [
+        r"\b([A-Za-z0-9 \-/]+?)\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:LF|L\.F\.|LINEAR FEET|FT)\b",
+        r"\b([\d,]+(?:\.\d+)?)\s*(?:LF|L\.F\.|LINEAR FEET)\s+([A-Za-z0-9 \-/]+)\b"
+    ]
+
+    for pattern in lf_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            label = " ".join(match.group(1).split())
+            value = safe_float(match.group(2))
+
+            if value and 1 <= value <= 10000:
+                quantities["linear_lengths"].append({
+                    "label": label[:60],
+                    "value": value,
+                    "unit": "lf"
+                })
+
+    # Heights: 6 FT HIGH, 8' wall, etc.
+    height_patterns = [
+        r"\b([\d]+(?:\.\d+)?)\s*(?:FT|FEET|')\s*(?:HIGH|HEIGHT|HT)\b",
+        r"\b(?:HEIGHT|HT)\s*[:=\-]?\s*([\d]+(?:\.\d+)?)\s*(?:FT|FEET|')\b"
+    ]
+
+    for pattern in height_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            value = safe_float(match.group(1))
+            if value and 1 <= value <= 40:
+                quantities["heights"].append({
+                    "label": "height",
+                    "value": value,
+                    "unit": "ft"
+                })
+
+    # Footings: 18" x 24", 24x36 footing
+    footing_patterns = [
+        r"\b(?:FOOTING|FTG)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*[\"']?\s*[xX]\s*(\d+(?:\.\d+)?)\s*[\"']?",
+        r"\b(\d+(?:\.\d+)?)\s*[\"']?\s*[xX]\s*(\d+(?:\.\d+)?)\s*[\"']?\s*(?:FOOTING|FTG)\b"
+    ]
+
+    for pattern in footing_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            quantities["footings"].append({
+                "width": safe_float(match.group(1)),
+                "depth": safe_float(match.group(2)),
+                "unit": "in"
+            })
+
+    # Steel beams: W12x26, W14X30
+    for match in re.finditer(r"\b(W\d{1,2}\s*[xX]\s*\d{1,3})\b", t, re.IGNORECASE):
+        quantities["beams"].append({
+            "type": match.group(1).upper().replace(" ", ""),
+            "material": "steel"
+        })
+
+    # Retaining wall mentions
+    if re.search(r"retaining wall", t, re.IGNORECASE):
+        quantities["walls"].append({
+            "type": "retaining wall",
+            "quantity_detected": True
+        })
+
+    return quantities
 
 def extract_structural_flags(text):
     t = text or ""
@@ -563,6 +656,7 @@ def pre_extract_plan_data(text):
     structural_flags = extract_structural_flags(text)
     site_constraints = extract_site_constraints(text)
     utilities = extract_utilities(text)
+    measurement_quantities = extract_measurement_quantities(text)
 
     construction_type = find_first([
         r"CONSTRUCTION TYPE\s*[:\s]\s*(TYPE\s*[A-Z0-9\-]+)",
@@ -655,6 +749,7 @@ def pre_extract_plan_data(text):
             "all_electric": all_electric
         },
         "utilities": utilities,
+        "measurement_quantities": measurement_quantities,
         "mechanical_systems": mechanical_systems,
         "scope_of_work": scope_of_work,
         "complexity_factors": complexity_factors,
