@@ -275,12 +275,165 @@ def extract_service_quantities(text):
 
     return services
 
+def extract_pipe_sizes(text):
+    t = text or ""
+    pipes = []
+
+    patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(WATER|DOMESTIC WATER|SEWER|SANITARY|STORM|DRAIN|GAS)\b',
+        r'\b(WATER|DOMESTIC WATER|SEWER|SANITARY|STORM|DRAIN|GAS)\s+(?:LINE|PIPE|SERVICE)?\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
+    ]
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            g1, g2 = match.group(1), match.group(2)
+
+            if re.search(r"\d", g1):
+                size = g1
+                system = g2
+            else:
+                system = g1
+                size = g2
+
+            add_unique(
+                pipes,
+                {
+                    "system": clean_label(system).lower(),
+                    "size": f'{size}"'
+                },
+                ["system", "size"]
+            )
+
+    return pipes
+
+
+def extract_slab_thicknesses(text):
+    t = text or ""
+    slabs = []
+
+    patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(?:THICK\s+)?SLAB\b',
+        r'\bSLAB\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b',
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+CONCRETE\s+SLAB\b'
+    ]
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            add_unique(
+                slabs,
+                {
+                    "description": "concrete slab",
+                    "thickness": safe_float(match.group(1)),
+                    "unit": "in"
+                },
+                ["description", "thickness", "unit"]
+            )
+
+    return slabs
+
+
+def extract_lumber_sizes(text):
+    t = text or ""
+    lumber = []
+
+    patterns = [
+        r"\b(2\s*[xX]\s*\d+|4\s*[xX]\s*\d+|6\s*[xX]\s*\d+|8\s*[xX]\s*\d+)\s*(STUD|JOIST|RAFTER|BEAM|HEADER|PLATE)?\b",
+        r"\b(LVL|PSL|GLULAM)\s*[\w\s\"xX\-/.]{0,40}\b"
+    ]
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            add_unique(
+                lumber,
+                {
+                    "description": clean_label(match.group(0)),
+                    "material": "wood"
+                },
+                ["description", "material"]
+            )
+
+    return lumber
+
+
+def extract_roof_quantities(text):
+    t = text or ""
+    roof = {
+        "area_sqft": None,
+        "pitch": None,
+        "materials": []
+    }
+
+    area = re.search(
+        r"\bROOF\s+(?:AREA)?\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?|SQUARE FEET)\b",
+        t,
+        re.IGNORECASE
+    )
+
+    if area:
+        roof["area_sqft"] = safe_float(area.group(1))
+
+    pitch = re.search(r"\bROOF\s+PITCH\s*[:=\-]?\s*(\d+\s*[:/]\s*\d+)\b", t, re.IGNORECASE)
+    if pitch:
+        roof["pitch"] = pitch.group(1).replace(" ", "")
+
+    material_patterns = [
+        ("standing seam metal", r"standing seam metal"),
+        ("composite roofing", r"composite roofing|composition shingle|asphalt shingle"),
+        ("built-up roof", r"built[- ]up roof|granulated cap sheet"),
+        ("tile roofing", r"tile roof|tile roofing")
+    ]
+
+    for label, pattern in material_patterns:
+        if re.search(pattern, t, re.IGNORECASE):
+            roof["materials"].append(label)
+
+    roof["materials"] = list(dict.fromkeys(roof["materials"]))
+
+    return roof
+
+
+def extract_door_window_counts(text):
+    t = text or ""
+
+    counts = {
+        "windows": None,
+        "doors": None,
+        "sliders": None,
+        "garage_doors": None
+    }
+
+    window_marks = re.findall(r"\bW\d+\b", t, re.IGNORECASE)
+    door_marks = re.findall(r"\bD\d+\b", t, re.IGNORECASE)
+
+    if window_marks:
+        counts["windows"] = len(set(m.upper() for m in window_marks))
+
+    if door_marks:
+        counts["doors"] = len(set(m.upper() for m in door_marks))
+
+    sliders = re.findall(r"\bSLIDER|SLIDING DOOR|MULTI[- ]SLIDE\b", t, re.IGNORECASE)
+    if sliders:
+        counts["sliders"] = len(sliders)
+
+    garage_doors = re.findall(r"\bGARAGE DOOR\b", t, re.IGNORECASE)
+    if garage_doors:
+        counts["garage_doors"] = len(garage_doors)
+
+    return counts
 
 def extract_quantity_data(text):
+    t = text or ""
+
     return {
-        "areas": extract_area_quantities(text),
-        "linear_lengths": extract_linear_quantities(text),
-        "walls": extract_wall_quantities(text),
-        "structural": extract_structural_quantities(text),
-        "services": extract_service_quantities(text)
+        "areas": extract_area_quantities(t),
+        "linear_lengths": extract_linear_quantities(t),
+        "walls": extract_wall_quantities(t),
+        "structural": extract_structural_quantities(t),
+        "services": extract_service_quantities(t),
+        "pipe_sizes": extract_pipe_sizes(t),
+        "slab_thicknesses": extract_slab_thicknesses(t),
+        "lumber_sizes": extract_lumber_sizes(t),
+        "roof_quantities": extract_roof_quantities(t),
+        "door_window_counts": extract_door_window_counts(t)
     }
+
