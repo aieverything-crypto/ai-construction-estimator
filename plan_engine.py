@@ -303,6 +303,41 @@ def extract_site_constraints(text):
 
     return items
 
+def extract_utilities(text):
+    t = text or ""
+
+    electrical_service = find_first([
+        r"\b([1248]\d{2})\s*(?:amp|amps|a)\s+(?:main\s+)?(?:electrical\s+)?service\b",
+        r"\b(?:electrical\s+)?service\s*(?:size)?\s*[:\-]?\s*([1248]\d{2})\s*(?:amp|amps|a)\b",
+        r"\b([1248]\d{2})\s*(?:amp|amps|a)\s+(?:main\s+)?panel\b",
+        r"\bmain\s+panel\s*[:\-]?\s*([1248]\d{2})\s*(?:amp|amps|a)\b"
+    ], t)
+
+    water_service = find_first([
+        r"\b(\d+(?:\.\d+)?\s*(?:\"|in|inch)\s+water\s+service)\b",
+        r"\bwater\s+service\s*[:\-]?\s*(\d+(?:\.\d+)?\s*(?:\"|in|inch))\b",
+        r"\b(\d+(?:\.\d+)?\s*(?:\"|in|inch)\s+domestic\s+water)\b"
+    ], t)
+
+    sewer_service = None
+    if re.search(r"\bpublic sewer\b|\bsanitary sewer\b|\bsewer lateral\b", t, re.IGNORECASE):
+        sewer_service = "public sewer / sewer lateral"
+    elif re.search(r"\bseptic\b", t, re.IGNORECASE):
+        sewer_service = "septic"
+
+    gas_service = None
+    if re.search(r"\bnatural gas\b|\bgas service\b|\bgas meter\b", t, re.IGNORECASE):
+        gas_service = "gas service"
+    elif re.search(r"\ball[- ]electric\b|natural gas is not permitted|no gas\b", t, re.IGNORECASE):
+        gas_service = "no gas / all-electric"
+
+    return {
+        "electrical_service": f"{electrical_service}A" if electrical_service else None,
+        "water_service": water_service,
+        "sewer_service": sewer_service,
+        "gas_service": gas_service
+    }
+
 
 def extract_scope_items(text):
     t = text or ""
@@ -527,6 +562,7 @@ def pre_extract_plan_data(text):
     outdoor_features = extract_outdoor_features(text)
     structural_flags = extract_structural_flags(text)
     site_constraints = extract_site_constraints(text)
+    utilities = extract_utilities(text)
 
     construction_type = find_first([
         r"CONSTRUCTION TYPE\s*[:\s]\s*(TYPE\s*[A-Z0-9\-]+)",
@@ -618,6 +654,7 @@ def pre_extract_plan_data(text):
             "solar_required": solar_required,
             "all_electric": all_electric
         },
+        "utilities": utilities,
         "mechanical_systems": mechanical_systems,
         "scope_of_work": scope_of_work,
         "complexity_factors": complexity_factors,
