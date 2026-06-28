@@ -854,7 +854,83 @@ function buildDetailedPlanReport(data){
 
 	lines.push("");
 
+	lines.push("2C. QUANTITY TAKEOFF");
+	lines.push("--------------------");
 	
+	const q = parsed.quantity_data || {};
+	
+	if (q.areas && q.areas.length) {
+	    lines.push("Areas:");
+	    q.areas.slice(0, 12).forEach(item => {
+	        lines.push(`- ${item.label}: ${Math.round(item.value).toLocaleString()} ${item.unit}`);
+	    });
+	    lines.push("");
+	}
+	
+	if (q.linear_lengths && q.linear_lengths.length) {
+	    lines.push("Linear Measurements:");
+	    q.linear_lengths.slice(0, 12).forEach(item => {
+	        lines.push(`- ${item.label}: ${Math.round(item.value).toLocaleString()} ${item.unit}`);
+	    });
+	    lines.push("");
+	}
+	
+	if (q.walls && q.walls.length) {
+	    lines.push("Walls:");
+	    q.walls.forEach(item => {
+	        lines.push(`- ${item.type}${item.length ? ` | ${item.length} LF` : ""}${item.height ? ` | ${item.height} FT high` : ""}`);
+	    });
+	    lines.push("");
+	}
+	
+	if (q.slab_thicknesses && q.slab_thicknesses.length) {
+	    lines.push("Concrete:");
+	    q.slab_thicknesses.forEach(item => {
+	        lines.push(`- ${item.description}: ${item.thickness}" thick`);
+	    });
+	    lines.push("");
+	}
+	
+	if (q.pipe_sizes && q.pipe_sizes.length) {
+	    lines.push("Pipe / Utility Sizes:");
+	    q.pipe_sizes.forEach(item => {
+	        lines.push(`- ${item.system}: ${item.size}`);
+	    });
+	    lines.push("");
+	}
+	
+	if (q.roof_quantities) {
+	    const roofQ = q.roof_quantities;
+	    if (roofQ.area_sqft || roofQ.pitch || (roofQ.materials && roofQ.materials.length)) {
+	        lines.push("Roof:");
+	        if (roofQ.area_sqft) lines.push(`- Area: ${Math.round(roofQ.area_sqft).toLocaleString()} sqft`);
+	        if (roofQ.pitch) lines.push(`- Pitch: ${roofQ.pitch}`);
+	        if (roofQ.materials && roofQ.materials.length) lines.push(`- Materials: ${roofQ.materials.join(", ")}`);
+	        lines.push("");
+	    }
+	}
+	
+	if (q.door_window_counts) {
+	    const c = q.door_window_counts;
+	    if (c.windows || c.doors || c.sliders || c.garage_doors) {
+	        lines.push("Openings:");
+	        if (c.windows) lines.push(`- Windows: ${c.windows}`);
+	        if (c.doors) lines.push(`- Doors: ${c.doors}`);
+	        if (c.sliders) lines.push(`- Sliders: ${c.sliders}`);
+	        if (c.garage_doors) lines.push(`- Garage Doors: ${c.garage_doors}`);
+	        lines.push("");
+	    }
+	}
+	
+	if (
+	    (!q.areas || !q.areas.length) &&
+	    (!q.linear_lengths || !q.linear_lengths.length) &&
+	    (!q.walls || !q.walls.length) &&
+	    (!q.pipe_sizes || !q.pipe_sizes.length)
+	) {
+	    lines.push("- No detailed quantity takeoff values detected yet.");
+	    lines.push("");
+	}
 	
     lines.push("3. LOCATION / SITE CONDITIONS");
     lines.push("-----------------------------");
