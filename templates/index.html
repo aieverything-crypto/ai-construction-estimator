@@ -513,22 +513,22 @@ ${pageInsights ? `
 }
 
 function uniqueList(items) {
-    if (!items || !Array.isArray(items)) return [];
+    if (!Array.isArray(items)) return [];
 
     const seen = new Set();
-    const result = [];
 
-    items.forEach(item => {
-        const clean = String(item || "").trim();
-        const key = clean.toLowerCase();
+    return items.filter(item => {
+        const normalized = String(item || "")
+            .trim()
+            .toLowerCase();
 
-        if (clean && !seen.has(key)) {
-            seen.add(key);
-            result.push(clean);
-        }
+        if (!normalized) return false;
+
+        if (seen.has(normalized)) return false;
+
+        seen.add(normalized);
+        return true;
     });
-
-    return result;
 }
 
 function hasText(items, keyword) {
