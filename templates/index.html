@@ -512,6 +512,31 @@ ${pageInsights ? `
     }
 }
 
+function uniqueList(items) {
+    if (!items || !Array.isArray(items)) return [];
+
+    const seen = new Set();
+    const result = [];
+
+    items.forEach(item => {
+        const clean = String(item || "").trim();
+        const key = clean.toLowerCase();
+
+        if (clean && !seen.has(key)) {
+            seen.add(key);
+            result.push(clean);
+        }
+    });
+
+    return result;
+}
+
+function hasText(items, keyword) {
+    return uniqueList(items).some(item =>
+        item.toLowerCase().includes(keyword.toLowerCase())
+    );
+}
+
 function buildDetailedPlanReport(data){
     const parsed = data.parsed || {};
     const lines = [];
@@ -550,10 +575,10 @@ function buildDetailedPlanReport(data){
 	lines.push("3B. TAKEOFF SUMMARY");
 	lines.push("-------------------");
 	
-	const scope = parsed.scope_of_work || [];
-	const risks = parsed.risk_flags || [];
-	const site = parsed.site_constraints || [];
-	const systems = parsed.mechanical_systems || [];
+	const scope = uniqueList(parsed.scope_of_work || []);
+	const risks = uniqueList(parsed.risk_flags || []);
+	const site = uniqueList(parsed.site_constraints || []);
+	const systems = uniqueList(parsed.mechanical_systems || []);
 	
 	function hasItem(list, value) {
 	    return list.some(item => String(item).toLowerCase().includes(value));
@@ -583,42 +608,91 @@ function buildDetailedPlanReport(data){
 	lines.push("");
 	
 	lines.push("MEP:");
-	if (scope.includes("electrical service")) lines.push("- Electrical service");
-	if (scope.includes("plumbing fixtures")) lines.push("- Plumbing fixtures");
-	if (scope.includes("hvac")) lines.push("- HVAC");
-	if (scope.includes("fire sprinklers")) lines.push("- Fire sprinklers");
-	if (scope.includes("solar")) lines.push("- Solar PV");
-	systems.forEach(item => lines.push(`- ${item}`));
-	
+
+	if (hasText(scope, "electrical service")) lines.push("- Electrical service");
+	if (hasText(scope, "plumbing fixtures")) lines.push("- Plumbing fixtures");
+
+	if (hasText(scope, "hvac") || hasText(systems, "heat pump") || hasText(systems, "air handler")) {
+    lines.push("- HVAC / heat pump system");
+	}
+
+	if (hasText(scope, "fire sprinklers") || hasText(systems, "sprinkler")) {
+    lines.push("- Fire sprinkler system");
+	}
+
+	if (hasText(scope, "solar") || hasText(systems, "solar")) {
+    lines.push("- Solar PV");
+	}
+
+	if (hasText(systems, "water heater")) {
+    lines.push("- Heat pump water heater");
+	}
+
 	lines.push("");
 
 	lines.push("3C. BID-RELEVANT RISKS");
 	lines.push("----------------------");
 
-	const bidRisks = [];
+	const riskGroups = [];
 
 	if (parsed.location_data && parsed.location_data.flood_zone) {
-   		 bidRisks.push(`Flood Zone: ${parsed.location_data.flood_zone}`);
+    	riskGroups.push(`Flood risk / zone ${parsed.location_data.flood_zone}`);
 	}
 
-	if (parsed.site_constraints && parsed.site_constraints.length) {
-   		 parsed.site_constraints.forEach(item => bidRisks.push(item));
+	if (hasText(site, "grading") || hasText(site, "drainage")) {
+ 	   riskGroups.push("Grading / drainage complexity");
 	}
 
-	if (parsed.risk_flags && parsed.risk_flags.length) {
-   		 parsed.risk_flags.forEach(item => bidRisks.push(item));
+	if (hasText(site, "hillside") || hasText(site, "slope")) {
+ 	   riskGroups.push("Hillside / slope conditions");
 	}
 
-	if (parsed.structural_flags && parsed.structural_flags.length) {
-    		parsed.structural_flags.slice(0, 5).forEach(item => bidRisks.push(item));
+	if (hasText(site, "setback")) {
+ 	   riskGroups.push("Setback constraints");
 	}
 
-	const uniqueRisks = [...new Set(bidRisks)];
+	if (hasText(site, "erosion")) {
+  	  riskGroups.push("Erosion control");
+	}
 
-	if (uniqueRisks.length) {
-	  	  uniqueRisks.forEach(item => lines.push(`- ${item}`));
+	if (hasText(site, "remote") || hasText(site, "limited access")) {
+   	 riskGroups.push("Access / logistics constraints");
+	}
+
+	if (hasText(risks, "fire")) {
+   	 riskGroups.push("Fire code / sprinkler coordination");
+	}
+
+	if (hasText(risks, "earth retention") || hasText(scope, "retaining walls")) {
+  	  riskGroups.push("Earth retention / retaining wall coordination");
+	}
+
+	if (hasText(risks, "solar")) {
+    	riskGroups.push("Solar permit coordination");
+	}
+
+	if (hasText(risks, "electrical")) {
+  	  riskGroups.push("Electrical service sizing");
+	}
+
+	if (hasText(risks, "wind")) {
+   	 riskGroups.push("High wind area");
+	}
+
+	if (hasText(parsed.structural_flags || [], "shear")) {
+   	 riskGroups.push("Shear wall / lateral design review");
+	}
+
+	if (hasText(parsed.structural_flags || [], "cantilever")) {
+ 	   riskGroups.push("Cantilever framing review");
+	}
+
+	const uniqueRiskGroups = uniqueList(riskGroups);
+
+	if (uniqueRiskGroups.length) {
+    	uniqueRiskGroups.forEach(item => lines.push(`- ${item}`));
 	} else {
-   	 	lines.push("No major bid risks detected.");
+  	  lines.push("No major bid risks detected.");
 	}
 
 	lines.push("");
