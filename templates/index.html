@@ -593,9 +593,24 @@ function buildDetailedPlanReport(data){
 	lines.push("");
 	
 	lines.push("Foundation:");
-	if (parsed.foundation_type) lines.push(`- ${parsed.foundation_type}`);
-	if (scope.includes("garage slab")) lines.push("- Garage slab");
-	if (scope.includes("crawlspace")) lines.push("- Crawlspace");
+
+	const foundationItems = [];
+	
+	if (parsed.foundation_type) {
+	    foundationItems.push(parsed.foundation_type);
+	}
+	
+	if (hasText(scope, "garage slab")) {
+	    foundationItems.push("Garage slab");
+	}
+	
+	if (hasText(scope, "crawlspace") && !hasText(foundationItems, "crawlspace")) {
+	    foundationItems.push("Crawlspace");
+	}
+	
+	uniqueList(foundationItems).forEach(item => {
+	    lines.push(`- ${item}`);
+	});
 	
 	lines.push("");
 	
@@ -820,12 +835,51 @@ function buildDetailedPlanReport(data){
     lines.push("");
 
     lines.push("6. MEP / SYSTEMS");
-    lines.push("----------------");
-    if (parsed.mechanical_systems && parsed.mechanical_systems.length) {
-        parsed.mechanical_systems.forEach(item => lines.push(`- ${item}`));
-    } else {
-        lines.push("- No major MEP systems detected.");
-    }
+	lines.push("----------------");
+	
+	const mepItems = [];
+	
+	if (hasText(parsed.scope_of_work || [], "electrical service")) {
+	    mepItems.push("Electrical service");
+	}
+	
+	if (hasText(parsed.scope_of_work || [], "plumbing fixtures")) {
+	    mepItems.push("Plumbing fixtures");
+	}
+	
+	if (
+	    hasText(parsed.scope_of_work || [], "hvac") ||
+	    hasText(parsed.mechanical_systems || [], "heat pump") ||
+	    hasText(parsed.mechanical_systems || [], "air handler")
+	) {
+	    mepItems.push("HVAC / heat pump system");
+	}
+	
+	if (
+	    hasText(parsed.scope_of_work || [], "fire sprinklers") ||
+	    hasText(parsed.mechanical_systems || [], "sprinkler")
+	) {
+	    mepItems.push("Fire sprinkler system");
+	}
+	
+	if (
+	    hasText(parsed.scope_of_work || [], "solar") ||
+	    hasText(parsed.mechanical_systems || [], "solar")
+	) {
+	    mepItems.push("Solar PV");
+	}
+	
+	if (hasText(parsed.mechanical_systems || [], "water heater")) {
+	    mepItems.push("Heat pump water heater");
+	}
+	
+	const uniqueMepItems = uniqueList(mepItems);
+	
+	if (uniqueMepItems.length) {
+	    uniqueMepItems.forEach(item => lines.push(`- ${item}`));
+	} else {
+	    lines.push("- No major MEP systems detected.");
+	}
 
     if (parsed.requirements) {
         lines.push("");
