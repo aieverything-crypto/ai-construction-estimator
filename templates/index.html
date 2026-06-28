@@ -363,6 +363,7 @@ async function pollPlanJob(jobId){
 }
 
 
+
 function displayPlanResult(data){
     const parsed = data.parsed || {};
 
@@ -535,6 +536,58 @@ function hasText(items, keyword) {
     return uniqueList(items).some(item =>
         item.toLowerCase().includes(keyword.toLowerCase())
     );
+}
+
+function buildMissingInfo(parsed) {
+    const missing = [];
+
+    const scope = parsed.scope_of_work || [];
+    const systems = parsed.mechanical_systems || [];
+    const structural = parsed.structural_flags || [];
+    const location = parsed.location_data || {};
+    const area = parsed.area_breakdown || {};
+
+    if (!parsed.estimated_size_sqft) {
+        missing.push("Main building square footage not detected");
+    }
+
+    if (!area.garage_sqft && parsed.garage && parsed.garage.present) {
+        missing.push("Garage square footage not detected");
+    }
+
+    if (!area.deck_sqft && hasText(scope, "deck")) {
+        missing.push("Deck square footage not detected");
+    }
+
+    if (hasText(scope, "retaining walls") || hasText(structural, "retaining wall")) {
+        missing.push("Retaining wall length/height not detected");
+    }
+
+    if (hasText(scope, "electrical service") && !hasText(scope, "200") && !hasText(scope, "400")) {
+        missing.push("Electrical service size not detected");
+    }
+
+    if (!hasText(scope, "water service")) {
+        missing.push("Water service size not detected");
+    }
+
+    if (!hasText(scope, "sewer") && !hasText(scope, "septic")) {
+        missing.push("Sewer/septic connection not clearly detected");
+    }
+
+    if (hasText(systems, "heat pump") && !hasText(systems, "ton")) {
+        missing.push("HVAC tonnage not detected");
+    }
+
+    if (!parsed.roof_type) {
+        missing.push("Roof type not detected");
+    }
+
+    if (!location.flood_zone && hasText(parsed.site_constraints || [], "flood")) {
+        missing.push("Flood zone value not detected");
+    }
+
+    return uniqueList(missing);
 }
 
 function buildDetailedPlanReport(data){
@@ -710,6 +763,19 @@ function buildDetailedPlanReport(data){
   	  lines.push("No major bid risks detected.");
 	}
 
+	lines.push("");
+
+	lines.push("3D. MISSING / NEEDS REVIEW");
+	lines.push("--------------------------");
+	
+	const missingInfo = buildMissingInfo(parsed);
+	
+	if (missingInfo.length) {
+	    missingInfo.forEach(item => lines.push(`- ${item}`));
+	} else {
+	    lines.push("- No major missing items detected.");
+	}
+	
 	lines.push("");
 	
     lines.push("1. PROJECT OVERVIEW");
