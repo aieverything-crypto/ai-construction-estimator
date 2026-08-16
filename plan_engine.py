@@ -492,7 +492,6 @@ def pre_extract_plan_data(
     else:
         project_type = normalize_project_type(text)
     
-    legend_sheet = is_legend_sheet(text)
 
     gross_floor_area = find_number([
         r"PROPOSED GROSS FLOOR AREA\s*=\s*[\d,.\s()A-Z+-]*?=\s*([\d,]+\.\d+|[\d,]+)\s*SF",
@@ -570,10 +569,10 @@ def pre_extract_plan_data(
     site_constraints = extract_site_constraints(text)
     utilities = extract_utilities(text)
     quantity_data = extract_quantity_data(
-    text,
-    page_number=page_number,
-    page_type=page_type
-)
+        text,
+        page_number=page_number,
+        page_type=page_type
+    )
 
 
     construction_type = find_first([
@@ -629,16 +628,16 @@ def pre_extract_plan_data(
         "project_type": project_type,
         "estimated_size_sqft": estimated_size_sqft,
         "area_breakdown": {
-        "first_floor_sqft": first_floor,
-        "second_floor_sqft": second_floor,
-        "garage_sqft": garage_sqft,
-        "living_sqft": living_area,
-        "deck_sqft": deck_sqft,
-        "patio_sqft": patio_sqft,
-        "porch_sqft": porch_sqft,
-        "total_sqft": gross_floor_area,
-        "conditioned_sqft": conditioned_area
-    },
+            "first_floor_sqft": first_floor,
+            "second_floor_sqft": second_floor,
+            "garage_sqft": garage_sqft,
+            "living_sqft": living_area,
+            "deck_sqft": deck_sqft,
+            "patio_sqft": patio_sqft,
+            "porch_sqft": porch_sqft,
+            "total_sqft": gross_floor_area,
+            "conditioned_sqft": conditioned_area
+        },
         "stories": stories,
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
