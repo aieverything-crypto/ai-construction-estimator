@@ -17,6 +17,64 @@ def clean_label(value, max_len=60):
 
     return cleaned[:max_len].strip()
 
+AREA_LABEL_MAP = {
+    "garage": "garage_sqft",
+    "garage area": "garage_sqft",
+    "garage floor area": "garage_sqft",
+
+    "living area": "living_sqft",
+    "conditioned area": "conditioned_sqft",
+    "conditioned floor area": "conditioned_sqft",
+    "energy model conditioned area": "conditioned_sqft",
+
+    "first floor": "first_floor_sqft",
+    "1st floor": "first_floor_sqft",
+    "first floor gross area": "first_floor_sqft",
+    "1st floor gross area": "first_floor_sqft",
+
+    "second floor": "second_floor_sqft",
+    "2nd floor": "second_floor_sqft",
+    "second floor gross area": "second_floor_sqft",
+    "2nd floor gross area": "second_floor_sqft",
+
+    "total building area": "total_building_sqft",
+    "gross floor area": "gross_floor_sqft",
+    "proposed gross floor area": "gross_floor_sqft",
+
+    "lot area": "lot_area_sqft",
+
+    "deck": "deck_sqft",
+    "deck area": "deck_sqft",
+
+    "patio": "patio_sqft",
+    "patio area": "patio_sqft",
+
+    "porch": "porch_sqft",
+    "porch area": "porch_sqft",
+
+    "roof area": "roof_sqft",
+}
+
+def classify_area_label(label):
+    if not label:
+        return None
+
+    normalized = clean_label(label)
+    if not normalized:
+        return None
+
+    normalized = normalized.lower().strip()
+
+    # Exact match first
+    if normalized in AREA_LABEL_MAP:
+        return AREA_LABEL_MAP[normalized]
+
+    # Strong phrase match
+    for known_label, category in AREA_LABEL_MAP.items():
+        if known_label in normalized:
+            return category
+
+    return None
 
 def add_unique(items, item, key_fields):
     key = tuple(str(item.get(k, "")).lower().strip() for k in key_fields)
@@ -28,59 +86,91 @@ def add_unique(items, item, key_fields):
 
     items.append(item)
 
+def build_area_summary(area_items):
+    summary = {}
+
+    for item in area_items or []:
+        category = item.get("category")
+        value = item.get("value")
+
+        if not category or not value:
+            continue
+
+        # First strong contextual hit wins for now
+        if category not in summary:
+            summary[category] = value
+
+    return summary
 
 def extract_area_quantities(text):
     t = text or ""
     areas = []
 
-    patterns = [
-        r"\b([A-Za-z0-9 \-/]+?)\s*[:=\-]\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?|SQUARE FEET)\b",
-        r"\b([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?|SQUARE FEET)\s+([A-Za-z0-9 \-/]+)\b"
+    lines = [
+        " ".join(line.strip().split())
+        for line in t.splitlines()
+        if line.strip()
     ]
 
-    for pattern in patterns:
-        for match in re.finditer(pattern, t, re.IGNORECASE):
-            if len(match.groups()) < 2:
-                continue
+    sf_pattern = re.compile(
+        r"([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?|SQUARE FEET)\b",
+        re.IGNORECASE
+    )
 
-            # Pattern order can be label/value or value/label
-            g1, g2 = match.group(1), match.group(2)
+    for i, line in enumerate(lines):
 
-            if re.search(r"\d", g1):
-                value = safe_float(g1)
-                label = clean_label(g2)
-            else:
-                label = clean_label(g1)
-                value = safe_float(g2)
+        match = sf_pattern.search(line)
+        if not match:
+            continue
 
-            if not label or not value:
-                continue
+        value = safe_float(match.group(1))
 
-            if value < 10 or value > 200000:
-                continue
+        if not value or value < 10 or value > 200000:
+            continue
 
-            junk_labels = [
-                "sheet",
-                "scale",
-                "date",
-                "page",
-                "drawing",
-                "general notes",
-                "index"
-            ]
+        # First try to determine label from same line
+        before_value = line[:match.start()].strip(" :=-")
+        category = classify_area_label(before_value)
+        label = before_value
 
-            if any(j in label.lower() for j in junk_labels):
-                continue
+        # If same line doesn't provide a useful label,
+        # look at neighboring lines.
+        if not category:
+            candidate_lines = []
 
-            add_unique(
-                areas,
-                {
-                    "label": label,
-                    "value": value,
-                    "unit": "sqft"
-                },
-                ["label", "value", "unit"]
-            )
+            if i > 0:
+                candidate_lines.append(lines[i - 1])
+
+            if i > 1:
+                candidate_lines.append(lines[i - 2])
+
+            if i + 1 < len(lines):
+                candidate_lines.append(lines[i + 1])
+
+            for candidate in candidate_lines:
+                candidate_category = classify_area_label(candidate)
+
+                if candidate_category:
+                    category = candidate_category
+                    label = candidate
+                    break
+
+        # Ignore unrecognized SF values rather than guessing
+        if not category:
+            continue
+
+        item = {
+            "label": clean_label(label),
+            "category": category,
+            "value": value,
+            "unit": "sqft"
+        }
+
+        add_unique(
+            areas,
+            item,
+            ["category", "value", "unit"]
+        )
 
     return areas
 
@@ -422,18 +512,18 @@ def extract_door_window_counts(text):
     return counts
 
 def extract_quantity_data(text):
-    t = text or ""
+    areas = extract_area_quantities(text)
 
     return {
-        "areas": extract_area_quantities(t),
-        "linear_lengths": extract_linear_quantities(t),
-        "walls": extract_wall_quantities(t),
-        "structural": extract_structural_quantities(t),
-        "services": extract_service_quantities(t),
-        "pipe_sizes": extract_pipe_sizes(t),
-        "slab_thicknesses": extract_slab_thicknesses(t),
-        "lumber_sizes": extract_lumber_sizes(t),
-        "roof_quantities": extract_roof_quantities(t),
-        "door_window_counts": extract_door_window_counts(t)
+        "areas": areas,
+        "area_summary": build_area_summary(areas),
+        "linear_lengths": extract_linear_quantities(text),
+        "walls": extract_wall_quantities(text),
+        "structural": extract_structural_quantities(text),
+        "services": extract_service_quantities(text),
+        "pipe_sizes": extract_pipe_sizes(text),
+        "slab_thicknesses": extract_slab_thicknesses(text),
+        "lumber_sizes": extract_lumber_sizes(text),
+        "roof_quantities": extract_roof_quantities(text),
+        "door_window_counts": extract_door_window_counts(text)
     }
-
