@@ -932,7 +932,11 @@ def process_plan_job(job_id, client, file_bytes, filename):
             if page_text and len(page_text.strip()) > 50:
                 job["current_step"] = "pre-extracting page data"
 
-                pre_data = pre_extract_plan_data(page_text)
+                pre_data = pre_extract_plan_data(
+                    page_text,
+                    page_number=page_number,
+                    page_type=page_type
+                )
                 pre_data = sanitize_plan_data(pre_data)
 
                 try:
