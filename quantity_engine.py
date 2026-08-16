@@ -782,12 +782,42 @@ def normalize_quantity_candidate(
         "context": context
     }
 
+def build_area_candidates(area_items, page_number=None, page_type="unknown"):
+    candidates = []
+
+    for item in area_items or []:
+        label = item.get("label")
+        value = item.get("value")
+        unit = item.get("unit", "sqft")
+
+        if not label or not value:
+            continue
+
+        candidate = normalize_quantity_candidate(
+            category="area",
+            label=label,
+            value=value,
+            unit=unit,
+            page_number=page_number,
+            page_type=page_type,
+            context=None
+        )
+
+        candidates.append(candidate)
+
+    return candidates
+
 def extract_quantity_data(
     text,
     page_number=None,
     page_type="unknown"
 ):
     areas = extract_area_quantities(text)
+        area_candidates = build_area_candidates(
+        areas,
+        page_number=page_number,
+        page_type=page_type
+    )
     linear_lengths = extract_linear_quantities(text)
     walls = extract_wall_quantities(text)
     structural = extract_structural_quantities(text)
@@ -965,4 +995,5 @@ def extract_quantity_data(
         "lumber_sizes": lumber_sizes,
         "roof_quantities": roof_quantities,
         "door_window_counts": door_window_counts
+        "candidates": area_candidates,
     }
