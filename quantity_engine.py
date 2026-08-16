@@ -657,6 +657,131 @@ def extract_door_window_counts(text):
 
     return counts
 
+def normalize_quantity_candidate(
+    category,
+    label,
+    value,
+    unit,
+    page_number=None,
+    page_type="unknown",
+    context=None
+):
+    """
+    Convert an extracted measurement into a standard candidate
+    that can later be reconciled at the project level.
+    """
+
+    label_clean = (label or "").strip()
+    label_upper = label_clean.upper()
+
+    quantity_type = "unknown"
+    scope = "unknown"
+
+    # -------------------------
+    # AREA CLASSIFICATION
+    # -------------------------
+
+    if category == "area":
+
+        if "GARAGE" in label_upper:
+            quantity_type = "garage_area"
+            scope = "garage"
+
+        elif "DECK" in label_upper:
+            quantity_type = "deck_area"
+            scope = "exterior"
+
+        elif "PATIO" in label_upper:
+            quantity_type = "patio_area"
+            scope = "exterior"
+
+        elif "PORCH" in label_upper:
+            quantity_type = "porch_area"
+            scope = "exterior"
+
+        elif (
+            "CONDITIONED" in label_upper
+            or "LIVING AREA" in label_upper
+        ):
+            quantity_type = "conditioned_area"
+            scope = "project"
+
+        elif (
+            "1ST FLOOR" in label_upper
+            or "FIRST FLOOR" in label_upper
+        ):
+            quantity_type = "first_floor_area"
+            scope = "floor"
+
+        elif (
+            "2ND FLOOR" in label_upper
+            or "SECOND FLOOR" in label_upper
+        ):
+            quantity_type = "second_floor_area"
+            scope = "floor"
+
+        elif "GROSS FLOOR AREA" in label_upper:
+            quantity_type = "gross_floor_area"
+            scope = "project"
+
+        elif "TOTAL" in label_upper:
+            quantity_type = "total_area"
+            scope = "project"
+
+        else:
+            quantity_type = "area"
+
+    # -------------------------
+    # WALL CLASSIFICATION
+    # -------------------------
+
+    elif category == "wall":
+        quantity_type = "wall"
+        scope = "building"
+
+        if "RETAINING" in label_upper:
+            quantity_type = "retaining_wall"
+
+        elif "STEM WALL" in label_upper:
+            quantity_type = "stem_wall"
+
+        elif "SHEAR" in label_upper:
+            quantity_type = "shear_wall"
+
+    # -------------------------
+    # CONCRETE
+    # -------------------------
+
+    elif category == "concrete":
+        quantity_type = "concrete"
+        scope = "building"
+
+        if "SLAB" in label_upper:
+            quantity_type = "concrete_slab"
+
+        elif "FOOTING" in label_upper:
+            quantity_type = "footing"
+
+    # -------------------------
+    # PIPE / UTILITIES
+    # -------------------------
+
+    elif category == "pipe":
+        quantity_type = "pipe_size"
+        scope = "utility"
+
+    return {
+        "category": category,
+        "quantity_type": quantity_type,
+        "label": label_clean,
+        "value": value,
+        "unit": unit,
+        "page": page_number,
+        "page_type": page_type or "unknown",
+        "scope": scope,
+        "context": context
+    }
+
 def extract_quantity_data(
     text,
     page_number=None,
