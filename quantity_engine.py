@@ -175,41 +175,107 @@ def extract_area_quantities(text):
     return areas
 
 
+LINEAR_LABEL_MAP = {
+    "retaining wall": "retaining_wall",
+    "stem wall": "stem_wall",
+    "foundation wall": "foundation_wall",
+    "footing": "footing",
+    "continuous footing": "footing",
+    "fence": "fence",
+    "guardrail": "guardrail",
+    "guard rail": "guardrail",
+    "handrail": "handrail",
+    "gutter": "gutter",
+    "ridge": "roof_ridge",
+    "valley": "roof_valley",
+    "curb": "curb",
+    "sewer lateral": "sewer_lateral",
+    "water service": "water_service"
+}
+
+
+def classify_linear_label(label):
+    if not label:
+        return None
+
+    normalized = clean_label(label)
+
+    if not normalized:
+        return None
+
+    normalized = normalized.lower()
+
+    for known_label, category in LINEAR_LABEL_MAP.items():
+        if known_label in normalized:
+            return category
+
+    return None
+
 def extract_linear_quantities(text):
     t = text or ""
     lengths = []
 
-    patterns = [
-        r"\b([A-Za-z0-9 \-/]+?)\s*[:=\-]\s*([\d,]+(?:\.\d+)?)\s*(?:LF|L\.F\.|LINEAR FEET)\b",
-        r"\b([\d,]+(?:\.\d+)?)\s*(?:LF|L\.F\.|LINEAR FEET)\s+([A-Za-z0-9 \-/]+)\b"
+    lines = [
+        " ".join(line.strip().split())
+        for line in t.splitlines()
+        if line.strip()
     ]
 
-    for pattern in patterns:
-        for match in re.finditer(pattern, t, re.IGNORECASE):
-            g1, g2 = match.group(1), match.group(2)
+    lf_pattern = re.compile(
+        r"([\d,]+(?:\.\d+)?)\s*(?:LF|L\.F\.|LINEAR FEET)\b",
+        re.IGNORECASE
+    )
 
-            if re.search(r"\d", g1):
-                value = safe_float(g1)
-                label = clean_label(g2)
-            else:
-                label = clean_label(g1)
-                value = safe_float(g2)
+    for i, line in enumerate(lines):
+        match = lf_pattern.search(line)
 
-            if not label or not value:
-                continue
+        if not match:
+            continue
 
-            if value < 1 or value > 10000:
-                continue
+        value = safe_float(match.group(1))
 
-            add_unique(
-                lengths,
-                {
-                    "label": label,
-                    "value": value,
-                    "unit": "lf"
-                },
-                ["label", "value", "unit"]
-            )
+        if not value or value < 1 or value > 10000:
+            continue
+
+        before_value = line[:match.start()].strip(" :=-")
+
+        category = classify_linear_label(before_value)
+        label = before_value
+
+        if not category:
+            candidate_lines = []
+
+            if i > 0:
+                candidate_lines.append(lines[i - 1])
+
+            if i > 1:
+                candidate_lines.append(lines[i - 2])
+
+            if i + 1 < len(lines):
+                candidate_lines.append(lines[i + 1])
+
+            for candidate in candidate_lines:
+                candidate_category = classify_linear_label(candidate)
+
+                if candidate_category:
+                    category = candidate_category
+                    label = candidate
+                    break
+
+        # Ignore weak / unlabeled measurements
+        if not category:
+            continue
+
+        add_unique(
+            lengths,
+            {
+                "label": clean_label(label),
+                "category": category,
+                "value": value,
+                "unit": "lf"
+            },
+            ["category", "value", "unit"]
+        )
 
     return lengths
 
@@ -342,14 +408,20 @@ def extract_service_quantities(text):
             ["service_size"]
         )
 
-    for match in re.finditer(r"\b(\d+(?:\.\d+)?\s*(?:\"|IN|INCH))\s+(?:WATER|DOMESTIC WATER|WATER SERVICE)\b", t, re.IGNORECASE):
-        add_unique(
-            services["water"],
-            {
-                "service_size": clean_label(match.group(1))
-            },
-            ["service_size"]
-        )
+    water_patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(?:DOMESTIC\s+)?WATER\s+(?:SERVICE|LINE|MAIN)\b',
+        r'\b(?:DOMESTIC\s+)?WATER\s+(?:SERVICE|LINE|MAIN)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
+    ]
+
+    for pattern in water_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            add_unique(
+                services["water"],
+                {
+                    "service_size": f'{match.group(1)}"'
+                },
+                ["service_size"]
+            )
 
     if re.search(r"public sewer|sanitary sewer|sewer lateral", t, re.IGNORECASE):
         add_unique(services["sewer"], {"type": "public sewer / sewer lateral"}, ["type"])
@@ -537,28 +609,51 @@ def extract_door_window_counts(text):
     t = text or ""
 
     counts = {
-        "windows": None,
-        "doors": None,
-        "sliders": None,
-        "garage_doors": None
+        "window_types_detected": None,
+        "door_types_detected": None,
+        "slider_mentions": None,
+        "garage_door_mentions": None
     }
 
-    window_marks = re.findall(r"\bW\d+\b", t, re.IGNORECASE)
-    door_marks = re.findall(r"\bD\d+\b", t, re.IGNORECASE)
+    window_marks = re.findall(
+        r"\bW\d+\b",
+        t,
+        re.IGNORECASE
+    )
+
+    door_marks = re.findall(
+        r"\bD\d+\b",
+        t,
+        re.IGNORECASE
+    )
 
     if window_marks:
-        counts["windows"] = len(set(m.upper() for m in window_marks))
+        counts["window_types_detected"] = len(
+            set(m.upper() for m in window_marks)
+        )
 
     if door_marks:
-        counts["doors"] = len(set(m.upper() for m in door_marks))
+        counts["door_types_detected"] = len(
+            set(m.upper() for m in door_marks)
+        )
 
-    sliders = re.findall(r"\bSLIDER|SLIDING DOOR|MULTI[- ]SLIDE\b", t, re.IGNORECASE)
+    sliders = re.findall(
+        r"\bSLIDER\b|\bSLIDING DOOR\b|\bMULTI[- ]SLIDE\b",
+        t,
+        re.IGNORECASE
+    )
+
     if sliders:
-        counts["sliders"] = len(sliders)
+        counts["slider_mentions"] = len(sliders)
 
-    garage_doors = re.findall(r"\bGARAGE DOOR\b", t, re.IGNORECASE)
+    garage_doors = re.findall(
+        r"\bGARAGE DOOR\b",
+        t,
+        re.IGNORECASE
+    )
+
     if garage_doors:
-        counts["garage_doors"] = len(garage_doors)
+        counts["garage_door_mentions"] = len(garage_doors)
 
     return counts
 
