@@ -813,11 +813,13 @@ def extract_quantity_data(
     page_type="unknown"
 ):
     areas = extract_area_quantities(text)
-        area_candidates = build_area_candidates(
+
+    area_candidates = build_area_candidates(
         areas,
         page_number=page_number,
         page_type=page_type
     )
+
     linear_lengths = extract_linear_quantities(text)
     walls = extract_wall_quantities(text)
     structural = extract_structural_quantities(text)
@@ -893,8 +895,13 @@ def extract_quantity_data(
         "details"
     }
 
+    # --------------------------------
+    # APPLY PAGE-TYPE GATING
+    # --------------------------------
+
     if page_type not in area_allowed:
         areas = []
+        area_candidates = []
 
     if page_type not in linear_allowed:
         linear_lengths = []
@@ -979,13 +986,18 @@ def extract_quantity_data(
         item["source_page"] = page_number
         item["page_type"] = page_type
 
-    if roof_quantities.get("area_sqft") or roof_quantities.get("pitch") or roof_quantities.get("materials"):
+    if (
+        roof_quantities.get("area_sqft")
+        or roof_quantities.get("pitch")
+        or roof_quantities.get("materials")
+    ):
         roof_quantities["source_page"] = page_number
         roof_quantities["page_type"] = page_type
 
     return {
         "areas": areas,
         "area_summary": build_area_summary(areas),
+        "candidates": area_candidates,
         "linear_lengths": linear_lengths,
         "walls": walls,
         "structural": structural,
@@ -995,5 +1007,4 @@ def extract_quantity_data(
         "lumber_sizes": lumber_sizes,
         "roof_quantities": roof_quantities,
         "door_window_counts": door_window_counts
-        "candidates": area_candidates,
     }
