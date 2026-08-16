@@ -474,7 +474,11 @@ def build_complexity_and_risks(text, extracted):
     return complexity_factors, risk_flags
 
 
-def pre_extract_plan_data(text):
+def pre_extract_plan_data(
+    text,
+    page_number=None,
+    page_type="unknown"
+):
     """
     Deterministic extraction layer before AI.
     """
@@ -565,7 +569,11 @@ def pre_extract_plan_data(text):
     structural_flags = extract_structural_flags(text)
     site_constraints = extract_site_constraints(text)
     utilities = extract_utilities(text)
-    quantity_data = extract_quantity_data(text)
+    quantity_data = extract_quantity_data(
+    text,
+    page_number=page_number,
+    page_type=page_type
+)
 
 
     construction_type = find_first([
