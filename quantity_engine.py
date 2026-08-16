@@ -369,27 +369,78 @@ def extract_pipe_sizes(text):
     t = text or ""
     pipes = []
 
-    patterns = [
-        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(WATER|DOMESTIC WATER|SEWER|SANITARY|STORM|DRAIN|GAS)\b',
-        r'\b(WATER|DOMESTIC WATER|SEWER|SANITARY|STORM|DRAIN|GAS)\s+(?:LINE|PIPE|SERVICE)?\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
+    # -----------------------------
+    # WATER
+    # -----------------------------
+    water_patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(?:DOMESTIC\s+)?WATER\s+(?:SERVICE|LINE|MAIN)\b',
+        r'\b(?:DOMESTIC\s+)?WATER\s+(?:SERVICE|LINE|MAIN)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
     ]
 
-    for pattern in patterns:
+    for pattern in water_patterns:
         for match in re.finditer(pattern, t, re.IGNORECASE):
-            g1, g2 = match.group(1), match.group(2)
-
-            if re.search(r"\d", g1):
-                size = g1
-                system = g2
-            else:
-                system = g1
-                size = g2
-
             add_unique(
                 pipes,
                 {
-                    "system": clean_label(system).lower(),
-                    "size": f'{size}"'
+                    "system": "water",
+                    "size": f'{match.group(1)}"'
+                },
+                ["system", "size"]
+            )
+
+    # -----------------------------
+    # SEWER
+    # -----------------------------
+    sewer_patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(?:SANITARY\s+)?SEWER\s+(?:LINE|LATERAL|MAIN|PIPE)?\b',
+        r'\b(?:SANITARY\s+)?SEWER\s+(?:LINE|LATERAL|MAIN|PIPE)?\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
+    ]
+
+    for pattern in sewer_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            add_unique(
+                pipes,
+                {
+                    "system": "sewer",
+                    "size": f'{match.group(1)}"'
+                },
+                ["system", "size"]
+            )
+
+    # -----------------------------
+    # STORM DRAIN
+    # -----------------------------
+    storm_patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+(?:STORM\s+DRAIN|STORM\s+LINE|STORM\s+PIPE)\b',
+        r'\b(?:STORM\s+DRAIN|STORM\s+LINE|STORM\s+PIPE)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
+    ]
+
+    for pattern in storm_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            add_unique(
+                pipes,
+                {
+                    "system": "storm drain",
+                    "size": f'{match.group(1)}"'
+                },
+                ["system", "size"]
+            )
+
+    # -----------------------------
+    # GAS
+    # -----------------------------
+    gas_patterns = [
+        r'\b(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\s+GAS\s+(?:SERVICE|LINE|MAIN|PIPE)\b',
+        r'\bGAS\s+(?:SERVICE|LINE|MAIN|PIPE)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:"|IN|INCH)\b'
+    ]
+
+    for pattern in gas_patterns:
+        for match in re.finditer(pattern, t, re.IGNORECASE):
+            add_unique(
+                pipes,
+                {
+                    "system": "gas",
+                    "size": f'{match.group(1)}"'
                 },
                 ["system", "size"]
             )
