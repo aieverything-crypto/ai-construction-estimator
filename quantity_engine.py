@@ -657,19 +657,187 @@ def extract_door_window_counts(text):
 
     return counts
 
-def extract_quantity_data(text):
+def extract_quantity_data(
+    text,
+    page_number=None,
+    page_type="unknown"
+):
     areas = extract_area_quantities(text)
+    linear_lengths = extract_linear_quantities(text)
+    walls = extract_wall_quantities(text)
+    structural = extract_structural_quantities(text)
+    services = extract_service_quantities(text)
+    pipe_sizes = extract_pipe_sizes(text)
+    slab_thicknesses = extract_slab_thicknesses(text)
+    lumber_sizes = extract_lumber_sizes(text)
+    roof_quantities = extract_roof_quantities(text)
+    door_window_counts = extract_door_window_counts(text)
+
+    # --------------------------------
+    # PAGE-TYPE QUANTITY GATING
+    # --------------------------------
+
+    area_allowed = {
+        "cover_sheet",
+        "floor_plan",
+        "site_civil",
+        "roof_plan"
+    }
+
+    linear_allowed = {
+        "site_civil",
+        "foundation",
+        "structural",
+        "roof_plan",
+        "plumbing"
+    }
+
+    wall_allowed = {
+        "site_civil",
+        "foundation",
+        "structural"
+    }
+
+    structural_allowed = {
+        "foundation",
+        "structural"
+    }
+
+    service_allowed = {
+        "cover_sheet",
+        "site_civil",
+        "electrical",
+        "plumbing"
+    }
+
+    pipe_allowed = {
+        "site_civil",
+        "plumbing"
+    }
+
+    slab_allowed = {
+        "foundation",
+        "structural"
+    }
+
+    lumber_allowed = {
+        "floor_plan",
+        "foundation",
+        "structural",
+        "roof_plan"
+    }
+
+    roof_allowed = {
+        "cover_sheet",
+        "floor_plan",
+        "roof_plan"
+    }
+
+    openings_allowed = {
+        "floor_plan",
+        "details"
+    }
+
+    if page_type not in area_allowed:
+        areas = []
+
+    if page_type not in linear_allowed:
+        linear_lengths = []
+
+    if page_type not in wall_allowed:
+        walls = []
+
+    if page_type not in structural_allowed:
+        structural = {
+            "footings": [],
+            "steel_beams": [],
+            "wood_members": []
+        }
+
+    if page_type not in service_allowed:
+        services = {
+            "electrical": [],
+            "water": [],
+            "sewer": [],
+            "gas": []
+        }
+
+    if page_type not in pipe_allowed:
+        pipe_sizes = []
+
+    if page_type not in slab_allowed:
+        slab_thicknesses = []
+
+    if page_type not in lumber_allowed:
+        lumber_sizes = []
+
+    if page_type not in roof_allowed:
+        roof_quantities = {
+            "area_sqft": None,
+            "pitch": None,
+            "materials": []
+        }
+
+    if page_type not in openings_allowed:
+        door_window_counts = {
+            "window_types_detected": None,
+            "door_types_detected": None,
+            "slider_mentions": None,
+            "garage_door_mentions": None
+        }
+
+    # --------------------------------
+    # ATTACH SOURCE INFORMATION
+    # --------------------------------
+
+    for item in areas:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    for item in linear_lengths:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    for item in walls:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    for group in structural.values():
+        for item in group:
+            item["source_page"] = page_number
+            item["page_type"] = page_type
+
+    for group in services.values():
+        for item in group:
+            item["source_page"] = page_number
+            item["page_type"] = page_type
+
+    for item in pipe_sizes:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    for item in slab_thicknesses:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    for item in lumber_sizes:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    if roof_quantities.get("area_sqft") or roof_quantities.get("pitch") or roof_quantities.get("materials"):
+        roof_quantities["source_page"] = page_number
+        roof_quantities["page_type"] = page_type
 
     return {
         "areas": areas,
         "area_summary": build_area_summary(areas),
-        "linear_lengths": extract_linear_quantities(text),
-        "walls": extract_wall_quantities(text),
-        "structural": extract_structural_quantities(text),
-        "services": extract_service_quantities(text),
-        "pipe_sizes": extract_pipe_sizes(text),
-        "slab_thicknesses": extract_slab_thicknesses(text),
-        "lumber_sizes": extract_lumber_sizes(text),
-        "roof_quantities": extract_roof_quantities(text),
-        "door_window_counts": extract_door_window_counts(text)
+        "linear_lengths": linear_lengths,
+        "walls": walls,
+        "structural": structural,
+        "services": services,
+        "pipe_sizes": pipe_sizes,
+        "slab_thicknesses": slab_thicknesses,
+        "lumber_sizes": lumber_sizes,
+        "roof_quantities": roof_quantities,
+        "door_window_counts": door_window_counts
     }
