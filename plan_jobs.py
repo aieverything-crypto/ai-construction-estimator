@@ -722,6 +722,181 @@ def strip_global_facts_from_local_page(parsed, page_type, page_tags, page_text="
 
     return cleaned
 
+AREA_PAGE_WEIGHTS = {
+    "cover_sheet": 6,
+    "floor_plan": 5,
+    "site_civil": 2,
+    "roof_plan": 1,
+    "foundation": 1,
+    "structural": 0,
+    "mechanical": 0,
+    "electrical": 0,
+    "plumbing": 0,
+    "details": 0,
+    "unknown": 0
+}
+
+def score_area_candidate(candidate):
+    score = 0
+
+    page_type = candidate.get("page_type", "unknown")
+    quantity_type = candidate.get("quantity_type", "unknown")
+    label = str(candidate.get("label") or "").upper()
+
+    score += AREA_PAGE_WEIGHTS.get(page_type, 0)
+
+    # Strong project-level labels
+    if "PROPOSED GROSS FLOOR AREA" in label:
+        score += 6
+    elif "GROSS FLOOR AREA" in label:
+        score += 4
+
+    if "CONDITIONED FLOOR AREA" in label:
+        score += 5
+
+    if "GARAGE FLOOR AREA" in label:
+        score += 5
+
+    if "FIRST FLOOR GROSS AREA" in label or "1ST FLOOR GROSS AREA" in label:
+        score += 5
+
+    if "SECOND FLOOR GROSS AREA" in label or "2ND FLOOR GROSS AREA" in label:
+        score += 5
+
+    # Combined exterior areas are useful, but not the same
+    # thing as a dedicated deck quantity.
+    if (
+        quantity_type == "deck_area"
+        and ("PATIO" in label or "PORCH" in label)
+    ):
+        score -= 2
+
+    # Descriptive statements are weaker than true field labels.
+    if "NOT INCLUDED" in label:
+        score -= 5
+
+    if candidate.get("scope") == "project":
+        score += 2
+
+    return score
+
+def reconcile_area_candidates(page_results):
+    candidates = []
+
+    # Pull candidates directly from each page.
+    # Do NOT rely on merged["quantity_data"], because normal
+    # dict merging can overwrite page-level quantity data.
+    for page in page_results:
+        parsed = page.get("parsed") or {}
+        quantity_data = parsed.get("quantity_data") or {}
+
+        for candidate in quantity_data.get("candidates") or []:
+            if candidate.get("category") != "area":
+                continue
+
+            candidate = dict(candidate)
+
+            # Fallback source data in case an older candidate
+            # does not already contain these.
+            if candidate.get("page") is None:
+                candidate["page"] = page.get("page")
+
+            if not candidate.get("page_type"):
+                candidate["page_type"] = page.get(
+                    "page_type",
+                    "unknown"
+                )
+
+            candidate["score"] = score_area_candidate(candidate)
+            candidates.append(candidate)
+
+    # Group by meaning, not merely by "sqft".
+    grouped = {}
+
+    for candidate in candidates:
+        quantity_type = candidate.get("quantity_type")
+
+        if not quantity_type or quantity_type == "unknown":
+            continue
+
+        grouped.setdefault(quantity_type, [])
+        grouped[quantity_type].append(candidate)
+
+    resolved = {}
+
+    for quantity_type, group in grouped.items():
+
+        # -----------------------------
+        # REPETITION SUPPORT
+        # -----------------------------
+        value_counts = Counter()
+
+        for candidate in group:
+            try:
+                normalized_value = round(float(candidate["value"]))
+                value_counts[normalized_value] += 1
+            except Exception:
+                continue
+
+        scored = []
+
+        for candidate in group:
+            candidate = dict(candidate)
+
+            try:
+                normalized_value = round(float(candidate["value"]))
+            except Exception:
+                continue
+
+            repetition = value_counts[normalized_value]
+
+            # Same value appearing independently is useful evidence.
+            candidate["score"] += min(
+                max(repetition - 1, 0) * 2,
+                6
+            )
+
+            scored.append(candidate)
+
+        if not scored:
+            continue
+
+        scored.sort(
+            key=lambda x: x.get("score", 0),
+            reverse=True
+        )
+
+        winner = scored[0]
+
+        # Don't show identical winner values as conflicts.
+        alternates = []
+
+        winner_value = round(float(winner["value"]))
+
+        for candidate in scored[1:]:
+            try:
+                candidate_value = round(float(candidate["value"]))
+            except Exception:
+                continue
+
+            if candidate_value == winner_value:
+                continue
+
+            alternates.append(candidate)
+
+        resolved[quantity_type] = {
+            "value": winner.get("value"),
+            "unit": winner.get("unit"),
+            "label": winner.get("label"),
+            "source_page": winner.get("page"),
+            "page_type": winner.get("page_type"),
+            "score": winner.get("score"),
+            "supporting_occurrences": value_counts[winner_value],
+            "conflicts": alternates[:5]
+        }
+
+    return resolved
+
 def merge_page_results(page_results):
     merged = {}
     drawing_index = []
@@ -750,7 +925,42 @@ def merge_page_results(page_results):
         if possible_index:
             drawing_index.extend(possible_index)
 
+    reconciled_quantities = reconcile_area_candidates(page_results)
+    
+    merged["reconciled_quantities"] = {
+        "areas": reconciled_quantities
+    }
+    
     voted_facts, global_fact_confidence = vote_global_facts(page_results)
+
+        area_breakdown = merged.get("area_breakdown") or {}
+
+    gross = reconciled_quantities.get("gross_floor_area")
+    conditioned = reconciled_quantities.get("conditioned_area")
+    first_floor = reconciled_quantities.get("first_floor_area")
+    second_floor = reconciled_quantities.get("second_floor_area")
+    garage = reconciled_quantities.get("garage_area")
+    deck = reconciled_quantities.get("deck_area")
+
+    if gross:
+        area_breakdown["total_sqft"] = gross["value"]
+
+    if conditioned:
+        area_breakdown["conditioned_sqft"] = conditioned["value"]
+
+    if first_floor:
+        area_breakdown["first_floor_sqft"] = first_floor["value"]
+
+    if second_floor:
+        area_breakdown["second_floor_sqft"] = second_floor["value"]
+
+    if garage:
+        area_breakdown["garage_sqft"] = garage["value"]
+
+    if deck:
+        area_breakdown["deck_sqft"] = deck["value"]
+
+    merged["area_breakdown"] = area_breakdown
 
     for key, value in voted_facts.items():
         merged[key] = value
