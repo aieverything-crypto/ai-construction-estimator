@@ -101,6 +101,57 @@ def build_area_summary(area_items):
             summary[category] = value
 
     return summary
+    
+def extract_floor_area_quantities(text):
+    t = text or ""
+    results = []
+
+    patterns = [
+        (
+            "upper_level_conditioned_area",
+            r"\bUPPER\s+LEVEL\s+CONDITIONED\s+AREA\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?)\b"
+        ),
+        (
+            "lower_level_conditioned_area",
+            r"\bLOWER\s+LEVEL\s+CONDITIONED\s+AREA\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?)\b"
+        ),
+        (
+            "first_floor_conditioned_area",
+            r"\b(?:FIRST|1ST)\s+FLOOR\s+CONDITIONED\s+AREA\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?)\b"
+        ),
+        (
+            "second_floor_conditioned_area",
+            r"\b(?:SECOND|2ND)\s+FLOOR\s+CONDITIONED\s+AREA\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?)\b"
+        ),
+        (
+            "upper_level_area",
+            r"\bUPPER\s+LEVEL\s+AREA\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?)\b"
+        ),
+        (
+            "lower_level_area",
+            r"\bLOWER\s+LEVEL\s+AREA\s*[:=\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:SF|SQ\.?\s*FT\.?)\b"
+        )
+    ]
+
+    for quantity_type, pattern in patterns:
+        match = re.search(pattern, t, re.IGNORECASE)
+
+        if not match:
+            continue
+
+        value = safe_float(match.group(1))
+
+        if not value or value < 100 or value > 50000:
+            continue
+
+        results.append({
+            "quantity_type": quantity_type,
+            "value": value,
+            "unit": "sqft",
+            "label": match.group(0)
+        })
+
+    return results
 
 def extract_area_quantities(text):
     t = text or ""
@@ -158,7 +209,30 @@ def extract_area_quantities(text):
         # Ignore unrecognized SF values rather than guessing
         if not category:
             continue
-
+        ROOM_AREA_LABELS = [
+            "bed",
+            "bedroom",
+            "bath",
+            "bathroom",
+            "closet",
+            "laundry",
+            "hallway",
+            "hall",
+            "stair",
+            "kitchen",
+            "dining",
+            "office",
+            "pantry",
+            "powder",
+            "primary closet"
+        ]
+        
+        label_lower = (label or "").lower()
+        
+        if "living area" not in label_lower:
+            if any(room_word in label_lower for room_word in ROOM_AREA_LABELS):
+                continue
+        
         item = {
             "label": clean_label(label),
             "category": category,
@@ -173,6 +247,7 @@ def extract_area_quantities(text):
         )
 
     return areas
+    
 
 
 LINEAR_LABEL_MAP = {
@@ -829,6 +904,7 @@ def extract_quantity_data(
     lumber_sizes = extract_lumber_sizes(text)
     roof_quantities = extract_roof_quantities(text)
     door_window_counts = extract_door_window_counts(text)
+    floor_areas = extract_floor_area_quantities(text)
 
     # --------------------------------
     # PAGE-TYPE QUANTITY GATING
@@ -923,7 +999,15 @@ def extract_quantity_data(
             "sewer": [],
             "gas": []
         }
-
+        
+    floor_area_allowed = {
+        "floor_plan",
+        "cover_sheet"
+    }
+    
+    if page_type not in floor_area_allowed:
+        floor_areas = []
+        
     if page_type not in pipe_allowed:
         pipe_sizes = []
 
@@ -953,6 +1037,10 @@ def extract_quantity_data(
     # --------------------------------
 
     for item in areas:
+        item["source_page"] = page_number
+        item["page_type"] = page_type
+
+    for item in floor_areas:
         item["source_page"] = page_number
         item["page_type"] = page_type
 
@@ -1007,4 +1095,5 @@ def extract_quantity_data(
         "lumber_sizes": lumber_sizes,
         "roof_quantities": roof_quantities,
         "door_window_counts": door_window_counts
+        "floor_areas": floor_areas,
     }
