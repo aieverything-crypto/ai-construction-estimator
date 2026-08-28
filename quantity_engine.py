@@ -1094,6 +1094,6 @@ def extract_quantity_data(
         "slab_thicknesses": slab_thicknesses,
         "lumber_sizes": lumber_sizes,
         "roof_quantities": roof_quantities,
-        "door_window_counts": door_window_counts
+        "door_window_counts": door_window_counts,
         "floor_areas": floor_areas,
     }
