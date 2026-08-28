@@ -792,8 +792,21 @@ def reconcile_area_candidates(page_results):
         for candidate in quantity_data.get("candidates") or []:
             if candidate.get("category") != "area":
                 continue
+            
+            candidate = dicfor floor_item in quantity_data.get("floor_areas") or []:
+            candidate = {
+                "category": "area",
+                "quantity_type": floor_item.get("quantity_type"),
+                "label": floor_item.get("label"),
+                "value": floor_item.get("value"),
+                "unit": floor_item.get("unit", "sqft"),
+                "page": floor_item.get("source_page") or page.get("page"),
+                "page_type": floor_item.get("page_type") or page.get("page_type"),
+                "scope": "floor"
+            }
 
-            candidate = dict(candidate)
+            candidate["score"] = score_area_candidate(candidate) + 8
+            candidates.append(candidate)t(candidate)
 
             # Fallback source data in case an older candidate
             # does not already contain these.
@@ -895,7 +908,79 @@ def reconcile_area_candidates(page_results):
         }
 
     return resolved
+    
+def validate_area_relationships(reconciled_quantities):
+    areas = dict(reconciled_quantities or {})
 
+    conditioned = areas.get("conditioned_area")
+    first_floor = areas.get("first_floor_area")
+    second_floor = areas.get("second_floor_area")
+    upper_level = areas.get("upper_level_conditioned_area")
+    lower_level = areas.get("lower_level_conditioned_area")
+
+    conditioned_value = conditioned.get("value") if conditioned else None
+
+    # If explicit upper/lower level values exist, prefer them.
+    if upper_level:
+        areas["second_floor_area"] = upper_level
+
+    if lower_level:
+        areas["first_floor_area"] = lower_level
+
+    # Infer missing first floor from conditioned - second floor
+    if conditioned_value and areas.get("second_floor_area"):
+        second_value = areas["second_floor_area"].get("value")
+
+        if second_value:
+            inferred_first = conditioned_value - second_value
+
+            if inferred_first > 300:
+                current_first = areas.get("first_floor_area")
+
+                if (
+                    not current_first
+                    or current_first.get("value", 0) < 300
+                ):
+                    areas["first_floor_area"] = {
+                        "value": round(inferred_first),
+                        "unit": "sqft",
+                        "label": "INFERRED FROM CONDITIONED AREA - SECOND FLOOR",
+                        "source_page": None,
+                        "page_type": "derived",
+                        "score": 0,
+                        "supporting_occurrences": 1,
+                        "conflicts": [],
+                        "derived": True
+                    }
+
+    # Infer missing second floor from conditioned - first floor
+    if conditioned_value and areas.get("first_floor_area"):
+        first_value = areas["first_floor_area"].get("value")
+
+        if first_value:
+            inferred_second = conditioned_value - first_value
+
+            if inferred_second > 300:
+                current_second = areas.get("second_floor_area")
+
+                if (
+                    not current_second
+                    or current_second.get("value", 0) < 300
+                ):
+                    areas["second_floor_area"] = {
+                        "value": round(inferred_second),
+                        "unit": "sqft",
+                        "label": "INFERRED FROM CONDITIONED AREA - FIRST FLOOR",
+                        "source_page": None,
+                        "page_type": "derived",
+                        "score": 0,
+                        "supporting_occurrences": 1,
+                        "conflicts": [],
+                        "derived": True
+                    }
+
+    return areas
+    
 def merge_page_results(page_results):
     merged = {}
     drawing_index = []
@@ -925,6 +1010,9 @@ def merge_page_results(page_results):
             drawing_index.extend(possible_index)
 
         reconciled_quantities = reconcile_area_candidates(page_results)
+        reconciled_quantities = validate_area_relationships(
+            reconciled_quantities
+        )
 
         merged["reconciled_quantities"] = {
             "areas": reconciled_quantities
@@ -958,6 +1046,12 @@ def merge_page_results(page_results):
     
         if garage:
             area_breakdown["garage_sqft"] = garage["value"]
+
+        if garage:
+            merged["garage"] = {
+                "present": True,
+                "sqft": garage["value"]
+            }
     
         if deck:
             area_breakdown["deck_sqft"] = deck["value"]
