@@ -740,6 +740,32 @@ def merge_plan_data(pre, ai):
     return merged
     
 def sanitize_plan_data(data):
+   # Bedrooms should be whole-number counts
+    if data.get("bedrooms") is not None:
+        try:
+            bedrooms = float(data["bedrooms"])
+    
+            if bedrooms < 0 or bedrooms > 12 or not bedrooms.is_integer():
+                data["bedrooms"] = None
+            else:
+                data["bedrooms"] = int(bedrooms)
+    
+        except Exception:
+            data["bedrooms"] = None
+    
+    
+    # Bathrooms may be whole or half counts
+    if data.get("bathrooms") is not None:
+        try:
+            bathrooms = float(data["bathrooms"])
+    
+            if bathrooms < 0 or bathrooms > 12:
+                data["bathrooms"] = None
+            elif abs((bathrooms * 2) - round(bathrooms * 2)) > 0.001:
+                data["bathrooms"] = None
+    
+        except Exception:
+            data["bathrooms"] = None
     # Bedrooms sanity
     if data.get("bedrooms"):
         if data["bedrooms"] < 0 or data["bedrooms"] > 20:
