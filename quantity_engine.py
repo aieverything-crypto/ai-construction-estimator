@@ -683,51 +683,51 @@ def normalize_quantity_candidate(
 
     if category == "area":
 
-        if "GARAGE" in label_upper:
-            quantity_type = "garage_area"
-            scope = "garage"
-
-        elif "DECK" in label_upper:
-            quantity_type = "deck_area"
-            scope = "exterior"
-
-        elif "PATIO" in label_upper:
-            quantity_type = "patio_area"
-            scope = "exterior"
-
-        elif "PORCH" in label_upper:
-            quantity_type = "porch_area"
-            scope = "exterior"
-
+        if "GROSS FLOOR AREA" in label_upper:
+            quantity_type = "gross_floor_area"
+            scope = "project"
+    
         elif (
             "CONDITIONED" in label_upper
             or "LIVING AREA" in label_upper
         ):
             quantity_type = "conditioned_area"
             scope = "project"
-
+    
         elif (
             "1ST FLOOR" in label_upper
             or "FIRST FLOOR" in label_upper
         ):
             quantity_type = "first_floor_area"
             scope = "floor"
-
+    
         elif (
             "2ND FLOOR" in label_upper
             or "SECOND FLOOR" in label_upper
         ):
             quantity_type = "second_floor_area"
             scope = "floor"
-
-        elif "GROSS FLOOR AREA" in label_upper:
-            quantity_type = "gross_floor_area"
-            scope = "project"
-
+    
+        elif "GARAGE" in label_upper:
+            quantity_type = "garage_area"
+            scope = "garage"
+    
+        elif "DECK" in label_upper:
+            quantity_type = "deck_area"
+            scope = "exterior"
+    
+        elif "PATIO" in label_upper:
+            quantity_type = "patio_area"
+            scope = "exterior"
+    
+        elif "PORCH" in label_upper:
+            quantity_type = "porch_area"
+            scope = "exterior"
+    
         elif "TOTAL" in label_upper:
             quantity_type = "total_area"
             scope = "project"
-
+    
         else:
             quantity_type = "area"
 
