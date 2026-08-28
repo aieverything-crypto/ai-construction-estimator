@@ -793,21 +793,20 @@ def reconcile_area_candidates(page_results):
             if candidate.get("category") != "area":
                 continue
             
-            candidate = dicfor floor_item in quantity_data.get("floor_areas") or []:
-            candidate = {
-                "category": "area",
-                "quantity_type": floor_item.get("quantity_type"),
-                "label": floor_item.get("label"),
-                "value": floor_item.get("value"),
-                "unit": floor_item.get("unit", "sqft"),
-                "page": floor_item.get("source_page") or page.get("page"),
-                "page_type": floor_item.get("page_type") or page.get("page_type"),
-                "scope": "floor"
-            }
-
-            candidate["score"] = score_area_candidate(candidate) + 8
-            candidates.append(candidate)t(candidate)
-
+            for floor_item in quantity_data.get("floor_areas") or []:
+                candidate = {
+                    "category": "area",
+                    "quantity_type": floor_item.get("quantity_type"),
+                    "label": floor_item.get("label"),
+                    "value": floor_item.get("value"),
+                    "unit": floor_item.get("unit", "sqft"),
+                    "page": floor_item.get("source_page") or page.get("page"),
+                    "page_type": floor_item.get("page_type") or page.get("page_type"),
+                    "scope": "floor"
+                }
+            
+                candidate["score"] = score_area_candidate(candidate) + 8
+                candidates.append(candidate)
             # Fallback source data in case an older candidate
             # does not already contain these.
             if candidate.get("page") is None:
