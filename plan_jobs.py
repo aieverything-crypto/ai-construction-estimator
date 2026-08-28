@@ -70,7 +70,6 @@ def vote_global_facts(page_results):
     for page in page_results:
         parsed = page.get("parsed") or {}
         page_type = page.get("page_type", "unknown")
-        parsed = apply_field_page_type_gate(parsed, page_type)
         page_tags = page.get("page_tags", [])
         page_number = page.get("page")
 
@@ -925,47 +924,53 @@ def merge_page_results(page_results):
         if possible_index:
             drawing_index.extend(possible_index)
 
-    reconciled_quantities = reconcile_area_candidates(page_results)
-    
-    merged["reconciled_quantities"] = {
-        "areas": reconciled_quantities
-    }
-    
-    voted_facts, global_fact_confidence = vote_global_facts(page_results)
+        reconciled_quantities = reconcile_area_candidates(page_results)
 
+        merged["reconciled_quantities"] = {
+            "areas": reconciled_quantities
+        }
+    
+        voted_facts, global_fact_confidence = vote_global_facts(page_results)
+    
+        # --------------------------------
+        # APPLY RECONCILED AREA QUANTITIES
+        # --------------------------------
         area_breakdown = merged.get("area_breakdown") or {}
-
-    gross = reconciled_quantities.get("gross_floor_area")
-    conditioned = reconciled_quantities.get("conditioned_area")
-    first_floor = reconciled_quantities.get("first_floor_area")
-    second_floor = reconciled_quantities.get("second_floor_area")
-    garage = reconciled_quantities.get("garage_area")
-    deck = reconciled_quantities.get("deck_area")
-
-    if gross:
-        area_breakdown["total_sqft"] = gross["value"]
-
-    if conditioned:
-        area_breakdown["conditioned_sqft"] = conditioned["value"]
-
-    if first_floor:
-        area_breakdown["first_floor_sqft"] = first_floor["value"]
-
-    if second_floor:
-        area_breakdown["second_floor_sqft"] = second_floor["value"]
-
-    if garage:
-        area_breakdown["garage_sqft"] = garage["value"]
-
-    if deck:
-        area_breakdown["deck_sqft"] = deck["value"]
-
-    merged["area_breakdown"] = area_breakdown
-
-    for key, value in voted_facts.items():
-        merged[key] = value
-
-    merged["global_fact_confidence"] = global_fact_confidence
+    
+        gross = reconciled_quantities.get("gross_floor_area")
+        conditioned = reconciled_quantities.get("conditioned_area")
+        first_floor = reconciled_quantities.get("first_floor_area")
+        second_floor = reconciled_quantities.get("second_floor_area")
+        garage = reconciled_quantities.get("garage_area")
+        deck = reconciled_quantities.get("deck_area")
+    
+        if gross:
+            area_breakdown["total_sqft"] = gross["value"]
+    
+        if conditioned:
+            area_breakdown["conditioned_sqft"] = conditioned["value"]
+    
+        if first_floor:
+            area_breakdown["first_floor_sqft"] = first_floor["value"]
+    
+        if second_floor:
+            area_breakdown["second_floor_sqft"] = second_floor["value"]
+    
+        if garage:
+            area_breakdown["garage_sqft"] = garage["value"]
+    
+        if deck:
+            area_breakdown["deck_sqft"] = deck["value"]
+    
+        merged["area_breakdown"] = area_breakdown
+    
+        # --------------------------------
+        # APPLY VOTED GLOBAL FACTS
+        # --------------------------------
+        for key, value in voted_facts.items():
+            merged[key] = value
+    
+        merged["global_fact_confidence"] = global_fact_confidence
     
     merged = sanitize_plan_data(merged)
 
