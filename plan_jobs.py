@@ -554,15 +554,7 @@ LOCAL_DETAIL_PAGE_TYPES = [
 
 
 def is_trusted_for_global_facts(page_type, page_tags):
-    if page_type in GLOBAL_TRUSTED_PAGE_TYPES:
-        return True
-
-    tags = page_tags or []
-
-    if "cover_sheet" in tags or "floor_plan" in tags or "site_civil" in tags:
-        return True
-
-    return False
+    return page_type in GLOBAL_TRUSTED_PAGE_TYPES
 
 def is_legend_or_reference_page(page_text):
     t = (page_text or "").lower()
