@@ -1118,61 +1118,166 @@ def merge_page_results(page_results):
 def classify_plan_page(text):
     t = (text or "").lower()
 
-    if any(x in t for x in ["cover sheet", "project data", "sheet index", "general notes"]):
-        return "cover_sheet"
-
-    if any(x in t for x in ["site plan", "grading", "drainage", "erosion", "setback", "lot area"]):
-        return "site_civil"
-
-    if any(x in t for x in ["floor plan", "bedroom", "bathroom", "kitchen", "living room"]):
-        return "floor_plan"
-
-    if any(x in t for x in ["foundation plan", "footing", "slab", "crawlspace", "basement"]):
-        return "foundation"
-
-    if any(x in t for x in ["structural", "shear wall", "beam", "joist", "rafter", "holdown"]):
-        return "structural"
-
-    if any(x in t for x in ["roof plan", "roofing", "ridge", "gable", "standing seam"]):
-        return "roof_plan"
-
-    if any(x in t for x in ["mechanical", "hvac", "heat pump", "air handler", "duct"]):
-        return "mechanical"
-
-    if any(x in t for x in ["electrical", "panel", "lighting", "receptacle", "service"]):
-        return "electrical"
-
-    if any(x in t for x in ["plumbing", "water heater", "fixture", "sewer", "drain"]):
-        return "plumbing"
-
-    if any(x in t for x in ["detail", "section", "schedule"]):
-        return "details"
-
-    return "unknown"
-
-def classify_plan_page_tags(text):
-    t = (text or "").lower()
-    tags = []
-
-    tag_rules = {
-        "cover_sheet": ["cover sheet", "project data", "sheet index", "general notes"],
-        "site_civil": ["site plan", "grading", "drainage", "erosion", "setback", "lot area"],
-        "floor_plan": ["floor plan", "bedroom", "bathroom", "kitchen", "living room"],
-        "foundation": ["foundation plan", "footing", "slab", "crawlspace", "basement"],
-        "structural": ["structural", "shear wall", "beam", "joist", "rafter", "holdown"],
-        "roof_plan": ["roof plan", "roofing", "ridge", "gable", "standing seam"],
-        "mechanical": ["mechanical", "hvac", "heat pump", "air handler", "duct"],
-        "electrical": ["electrical", "panel", "lighting", "receptacle", "service"],
-        "plumbing": ["plumbing", "water heater", "fixture", "sewer", "drain"],
-        "details": ["detail", "section", "schedule"]
+    scores = {
+        "cover_sheet": 0,
+        "site_civil": 0,
+        "floor_plan": 0,
+        "foundation": 0,
+        "structural": 0,
+        "roof_plan": 0,
+        "mechanical": 0,
+        "electrical": 0,
+        "plumbing": 0,
+        "details": 0
     }
 
-    for tag, keywords in tag_rules.items():
-        if any(keyword in t for keyword in keywords):
-            tags.append(tag)
+    rules = {
+        "cover_sheet": {
+            "cover sheet": 6,
+            "title sheet": 6,
+            "project information": 5,
+            "drawing index": 5,
+            "sheet index": 5,
+            "project data": 4,
+            "general notes": 1
+        },
 
-    if not tags:
-        tags.append("unknown")
+        "site_civil": {
+            "site plan": 6,
+            "grading plan": 6,
+            "drainage plan": 6,
+            "erosion control": 4,
+            "lot area": 3,
+            "setback": 2
+        },
+
+        "floor_plan": {
+            "floor plan": 7,
+            "upper level plan": 7,
+            "lower level plan": 7,
+            "first floor plan": 7,
+            "second floor plan": 7,
+            "bedroom": 1,
+            "kitchen": 1,
+            "living room": 1
+        },
+
+        "foundation": {
+            "foundation plan": 7,
+            "footing plan": 6,
+            "crawlspace plan": 6,
+            "slab plan": 5,
+            "footing": 1
+        },
+
+        "structural": {
+            "structural plan": 7,
+            "framing plan": 7,
+            "shear wall": 3,
+            "holdown": 3,
+            "beam schedule": 4,
+            "joist": 1
+        },
+
+        "roof_plan": {
+            "roof plan": 7,
+            "roof framing plan": 7,
+            "roof layout": 5,
+            "ridge": 1,
+            "standing seam": 1
+        },
+
+        "mechanical": {
+            "mechanical plan": 7,
+            "hvac plan": 7,
+            "mechanical schedule": 5,
+            "duct plan": 5,
+            "air handler": 2,
+            "heat pump": 2
+        },
+
+        "electrical": {
+            "electrical plan": 7,
+            "lighting plan": 6,
+            "power plan": 6,
+            "panel schedule": 6,
+            "receptacle": 2
+        },
+
+        "plumbing": {
+            "plumbing plan": 7,
+            "plumbing riser": 6,
+            "fixture schedule": 5,
+            "sanitary plan": 5,
+            "water service": 2,
+            "sewer lateral": 2
+        },
+
+        "details": {
+            "detail sheet": 6,
+            "wall section": 5,
+            "building section": 5,
+            "typical detail": 4,
+            "schedule": 1,
+            "section": 1
+        }
+    }
+
+    for page_type, keywords in rules.items():
+        for keyword, weight in keywords.items():
+            if keyword in t:
+                scores[page_type] += weight
+
+    best_type = max(scores, key=scores.get)
+    best_score = scores[best_type]
+
+    if best_score < 3:
+        return "unknown"
+
+    return best_type
+
+def classify_plan_page_tags(text):
+    primary = classify_plan_page(text)
+
+    tags = [primary]
+
+    t = (text or "").lower()
+
+    secondary_rules = {
+        "site_civil": [
+            "grading plan",
+            "drainage plan",
+            "site plan"
+        ],
+        "foundation": [
+            "foundation plan",
+            "footing plan"
+        ],
+        "roof_plan": [
+            "roof plan",
+            "roof framing plan"
+        ],
+        "mechanical": [
+            "mechanical plan",
+            "hvac plan"
+        ],
+        "electrical": [
+            "electrical plan",
+            "lighting plan",
+            "panel schedule"
+        ],
+        "plumbing": [
+            "plumbing plan",
+            "plumbing riser"
+        ]
+    }
+
+    for tag, strong_phrases in secondary_rules.items():
+        if tag == primary:
+            continue
+
+        if any(phrase in t for phrase in strong_phrases):
+            tags.append(tag)
 
     return tags
 
