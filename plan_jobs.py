@@ -772,133 +772,123 @@ def score_area_candidate(candidate):
     return score
 
 def reconcile_area_candidates(page_results):
-    candidates = []
+    """Resolve area evidence without modifying the page extraction records."""
+    from math import isfinite
 
-    # Pull candidates directly from each page.
-    # Do NOT rely on merged["quantity_data"], because normal
-    # dict merging can overwrite page-level quantity data.
-    for page in page_results:
-        parsed = page.get("parsed") or {}
-        quantity_data = parsed.get("quantity_data") or {}
-
-        for candidate in quantity_data.get("candidates") or []:
-            if candidate.get("category") != "area":
-                continue
-            
-            for floor_item in quantity_data.get("floor_areas") or []:
-                candidate = {
-                    "category": "area",
-                    "quantity_type": floor_item.get("quantity_type"),
-                    "label": floor_item.get("label"),
-                    "value": floor_item.get("value"),
-                    "unit": floor_item.get("unit", "sqft"),
-                    "page": floor_item.get("source_page") or page.get("page"),
-                    "page_type": floor_item.get("page_type") or page.get("page_type"),
-                    "scope": "floor"
-                }
-            
-                candidate["score"] = score_area_candidate(candidate) + 8
-                candidates.append(candidate)
-            # Fallback source data in case an older candidate
-            # does not already contain these.
-            if candidate.get("page") is None:
-                candidate["page"] = page.get("page")
-
-            if not candidate.get("page_type"):
-                candidate["page_type"] = page.get(
-                    "page_type",
-                    "unknown"
-                )
-
-            candidate["score"] = score_area_candidate(candidate)
-            candidates.append(candidate)
-
-    # Group by meaning, not merely by "sqft".
     grouped = {}
 
-    for candidate in candidates:
-        quantity_type = candidate.get("quantity_type")
-
-        if not quantity_type or quantity_type == "unknown":
+    for page in page_results or []:
+        if not isinstance(page, dict):
             continue
 
-        grouped.setdefault(quantity_type, [])
-        grouped[quantity_type].append(candidate)
+        parsed = page.get("parsed") or {}
+        if not isinstance(parsed, dict):
+            continue
+
+        quantity_data = parsed.get("quantity_data") or {}
+        if not isinstance(quantity_data, dict):
+            continue
+
+        # These are independent collections. A floor value must still be
+        # processed when there are no general area candidates on the page.
+        for collection, explicit_bonus in (("candidates", 0), ("floor_areas", 8)):
+            for item in quantity_data.get(collection) or []:
+                if not isinstance(item, dict):
+                    continue
+
+                candidate = dict(item)
+
+                if collection == "floor_areas":
+                    candidate["category"] = "area"
+                    candidate["scope"] = "floor"
+                elif candidate.get("category") != "area":
+                    continue
+
+                quantity_type = candidate.get("quantity_type")
+                if not quantity_type or quantity_type == "unknown":
+                    continue
+
+                raw_value = candidate.get("value")
+                if isinstance(raw_value, bool):
+                    continue
+
+                try:
+                    value = float(str(raw_value).replace(",", "").strip())
+                except (TypeError, ValueError, OverflowError):
+                    continue
+
+                if not isfinite(value) or value <= 0:
+                    continue
+
+                # This resolver handles square feet. Keep other units in
+                # their original records until a unit conversion is defined.
+                unit = str(candidate.get("unit") or "sqft").strip().lower()
+                if unit != "sqft":
+                    continue
+
+                source_page = candidate.get("page")
+                if source_page is None:
+                    source_page = candidate.get("source_page")
+                if source_page is None:
+                    source_page = page.get("page")
+
+                candidate["value"] = value
+                candidate["unit"] = unit
+                candidate["page"] = source_page
+                candidate["page_type"] = (
+                    candidate.get("page_type")
+                    or page.get("page_type")
+                    or "unknown"
+                )
+                candidate["source_collection"] = collection
+                candidate["score"] = score_area_candidate(candidate) + explicit_bonus
+
+                grouped.setdefault(quantity_type, []).append(candidate)
 
     resolved = {}
 
     for quantity_type, group in grouped.items():
-
-        # -----------------------------
-        # REPETITION SUPPORT
-        # -----------------------------
-        value_counts = Counter()
+        pages_by_value = {}
 
         for candidate in group:
-            try:
-                normalized_value = round(float(candidate["value"]))
-                value_counts[normalized_value] += 1
-            except Exception:
-                continue
+            pages = pages_by_value.setdefault(candidate["value"], set())
+            if candidate.get("page") is not None:
+                pages.add(str(candidate["page"]))
 
-        scored = []
-
+        # Multiple parser hits on one page do not count as corroboration.
+        # Evidence without a page number cannot earn a repetition bonus.
         for candidate in group:
-            candidate = dict(candidate)
+            page_count = len(pages_by_value[candidate["value"]])
+            candidate["score"] += min(max(page_count - 1, 0) * 2, 6)
 
-            try:
-                normalized_value = round(float(candidate["value"]))
-            except Exception:
-                continue
-
-            repetition = value_counts[normalized_value]
-
-            # Same value appearing independently is useful evidence.
-            candidate["score"] += min(
-                max(repetition - 1, 0) * 2,
-                6
-            )
-
-            scored.append(candidate)
-
-        if not scored:
-            continue
-
-        scored.sort(
-            key=lambda x: x.get("score", 0),
-            reverse=True
-        )
-
+        scored = sorted(group, key=lambda item: item["score"], reverse=True)
         winner = scored[0]
+        winner_value = winner["value"]
 
-        # Don't show identical winner values as conflicts.
-        alternates = []
+        supporting_sources = [
+            dict(candidate)
+            for candidate in scored
+            if candidate["value"] == winner_value
+        ]
+        conflicts = [
+            dict(candidate)
+            for candidate in scored
+            if candidate["value"] != winner_value
+        ]
 
-        winner_value = round(float(winner["value"]))
-
-        for candidate in scored[1:]:
-            try:
-                candidate_value = round(float(candidate["value"]))
-            except Exception:
-                continue
-
-            if candidate_value == winner_value:
-                continue
-
-            alternates.append(candidate)
-
-        resolved[quantity_type] = {
-            "value": winner.get("value"),
-            "unit": winner.get("unit"),
-            "label": winner.get("label"),
+        # Preserve the winning candidate's context and any existing source
+        # metadata. Keep every supporting record and conflicting value.
+        resolved_area = dict(winner)
+        resolved_area.update({
             "source_page": winner.get("page"),
-            "page_type": winner.get("page_type"),
-            "score": winner.get("score"),
-            "supporting_occurrences": value_counts[winner_value],
-            "conflicts": alternates[:5]
-        }
+            "supporting_occurrences": max(1, len(pages_by_value[winner_value])),
+            "supporting_sources": supporting_sources,
+            "conflicts": conflicts,
+        })
+        resolved[quantity_type] = resolved_area
 
     return resolved
+
     
 def validate_area_relationships(reconciled_quantities):
     areas = dict(reconciled_quantities or {})
